@@ -8,12 +8,6 @@ class Course(models.Model):
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True)
 
-    teacher = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
-        related_name="courses",
-    )
-
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -31,8 +25,14 @@ class Subject(models.Model):
     )
 
     name = models.CharField(max_length=100)
-    order = models.PositiveIntegerField(default=0)
 
+    teachers = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        related_name="teaching_subjects",
+        blank=True,
+    )
+
+    order = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

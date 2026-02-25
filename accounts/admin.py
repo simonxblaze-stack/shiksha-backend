@@ -6,7 +6,6 @@ from payments.models import Order, Payment
 from enrollments.models import Enrollment
 from assignments.models import Assignment, AssignmentSubmission
 from quizzes.models import (
-    SubjectTeacher,
     Quiz,
     Question,
     Choice,
@@ -68,23 +67,30 @@ class ProfileAdmin(admin.ModelAdmin):
 admin.site.register(Role)
 admin.site.register(UserRole)
 
-
 # =========================
 # COURSE ADMIN
 # =========================
 
+
 @admin.register(Course)
 class CourseAdmin(admin.ModelAdmin):
-    list_display = ("title", "teacher", "created_at")
+    list_display = ("title", "created_at")
     search_fields = ("title",)
     list_filter = ("created_at",)
 
 
 @admin.register(Subject)
 class SubjectAdmin(admin.ModelAdmin):
-    list_display = ("name", "course", "order")
+    list_display = ("name", "course", "order", "get_teachers")
     list_filter = ("course",)
     ordering = ("course", "order")
+    search_fields = ("name", "course__title")
+    filter_horizontal = ("teachers",)
+
+    def get_teachers(self, obj):
+        return ", ".join([t.email for t in obj.teachers.all()])
+
+    get_teachers.short_description = "Teachers"
 
 
 @admin.register(Chapter)
@@ -93,18 +99,18 @@ class ChapterAdmin(admin.ModelAdmin):
     list_filter = ("subject",)
     ordering = ("subject", "order")
 
-
 # =========================
 # PAYMENT ADMIN
 # =========================
 
+
 admin.site.register(Order)
 admin.site.register(Payment)
-
 
 # =========================
 # ENROLLMENT ADMIN
 # =========================
+
 
 @admin.register(Enrollment)
 class EnrollmentAdmin(admin.ModelAdmin):
@@ -112,10 +118,10 @@ class EnrollmentAdmin(admin.ModelAdmin):
     list_filter = ("status", "enrolled_at")
     search_fields = ("user__email", "course__title")
 
-
 # =========================
 # ASSIGNMENT ADMIN
 # =========================
+
 
 class AssignmentSubmissionInline(admin.TabularInline):
     model = AssignmentSubmission
@@ -161,12 +167,9 @@ class AssignmentSubmissionAdmin(admin.ModelAdmin):
     )
     ordering = ("-submitted_at",)
 
-
-@admin.register(SubjectTeacher)
-class SubjectTeacherAdmin(admin.ModelAdmin):
-    list_display = ("teacher", "subject", "assigned_at")
-    list_filter = ("subject__course", "subject")
-    search_fields = ("teacher__email", "subject__name")
+# =========================
+# QUIZ ADMIN
+# =========================
 
 
 class QuestionInline(admin.TabularInline):
