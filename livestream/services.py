@@ -1,5 +1,5 @@
 from django.conf import settings
-from livekit import AccessToken, VideoGrant
+from livekit.api import AccessToken, VideoGrant
 
 
 def generate_livekit_token(user, session, is_teacher=False):

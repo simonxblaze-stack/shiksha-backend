@@ -10,7 +10,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
 
-from livekit import WebhookReceiver
+from livekit.api import WebhookReceiver
 
 from enrollments.models import Enrollment
 from .models import LiveSession, LiveSessionAttendance
