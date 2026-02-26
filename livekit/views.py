@@ -1,7 +1,7 @@
 from django.views.decorators.csrf import csrf_exempt
 from django.http import HttpResponse
 from django.conf import settings
-from livekit.api import WebhookReceiver
+from livekit.webhook import WebhookReceiver
 
 
 @csrf_exempt
@@ -17,6 +17,6 @@ def livekit_webhook(request):
         print("Webhook error:", e)
         return HttpResponse(status=400)
 
-    print("LiveKit Event:", event.event)
+    print("Event:", event.event)
 
     return HttpResponse(status=200)
