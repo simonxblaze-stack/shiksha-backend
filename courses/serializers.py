@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Subject
+from .models import Subject, Course
 
 
 class SubjectSerializer(serializers.ModelSerializer):
@@ -19,3 +19,16 @@ class SubjectSerializer(serializers.ModelSerializer):
             teacher.username
             for teacher in obj.teachers.all()
         ]
+
+
+class CourseSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Course
+        fields = (
+            "id",
+            "title",
+            "description",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = ("id", "created_at", "updated_at")
