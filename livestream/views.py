@@ -101,7 +101,7 @@ def join_live_session(request, session_id):
     # TEACHER
     elif user.has_role("teacher"):
 
-        if not session.subject.teachers.filter(id=user.id).exists():
+        if not session.subject.subject_teachers.filter(teacher=user).exists():
             return Response({"detail": "Not assigned to this subject"}, status=403)
 
         is_teacher = True
