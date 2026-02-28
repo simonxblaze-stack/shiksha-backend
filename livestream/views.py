@@ -27,6 +27,9 @@ from .serializers import (
 logger = logging.getLogger(__name__)
 
 
+# =========================
+# STUDENT SESSION LIST
+# =========================
 class StudentLiveSessionListView(generics.ListAPIView):
     serializer_class = LiveSessionListSerializer
     permission_classes = [IsAuthenticated]
@@ -50,6 +53,9 @@ class StudentLiveSessionListView(generics.ListAPIView):
         )
 
 
+# =========================
+# TEACHER SESSION LIST
+# =========================
 class TeacherLiveSessionListView(generics.ListAPIView):
     serializer_class = LiveSessionListSerializer
     permission_classes = [IsAuthenticated]
@@ -68,6 +74,9 @@ class TeacherLiveSessionListView(generics.ListAPIView):
         )
 
 
+# =========================
+# JOIN SESSION
+# =========================
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def join_live_session(request, session_id):
@@ -109,11 +118,16 @@ def join_live_session(request, session_id):
     else:
         return Response({"detail": "Unauthorized role"}, status=403)
 
-    token = generate_livekit_token(
-        user=user,
-        session=session,
-        is_teacher=is_teacher,
-    )
+    # Generate LiveKit token safely
+    try:
+        token = generate_livekit_token(
+            user=user,
+            session=session,
+            is_teacher=is_teacher,
+        )
+    except Exception as e:
+        logger.exception("LiveKit token generation failed")
+        return Response({"detail": "LiveKit error"}, status=500)
 
     return Response({
         "livekit_url": settings.LIVEKIT_URL,
@@ -123,6 +137,9 @@ def join_live_session(request, session_id):
     })
 
 
+# =========================
+# CREATE SESSION
+# =========================
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def create_live_session(request):
@@ -145,6 +162,9 @@ def create_live_session(request):
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
+# =========================
+# LIVEKIT WEBHOOK
+# =========================
 @csrf_exempt
 def livekit_webhook(request):
     if request.method != "POST":
@@ -183,32 +203,26 @@ def livekit_webhook(request):
 
 @transaction.atomic
 def _handle_participant_join(event):
-    room_name = event.room.name
-    identity = str(event.participant.identity)
-
-    session = LiveSession.objects.filter(room_name=room_name).first()
+    session = LiveSession.objects.filter(room_name=event.room.name).first()
     if not session:
         return
 
     LiveSessionAttendance.objects.update_or_create(
         session=session,
-        user_id=identity,
+        user_id=str(event.participant.identity),
         defaults={"joined_at": timezone.now()}
     )
 
 
 @transaction.atomic
 def _handle_participant_left(event):
-    room_name = event.room.name
-    identity = str(event.participant.identity)
-
-    session = LiveSession.objects.filter(room_name=room_name).first()
+    session = LiveSession.objects.filter(room_name=event.room.name).first()
     if not session:
         return
 
     attendance = LiveSessionAttendance.objects.filter(
         session=session,
-        user_id=identity
+        user_id=str(event.participant.identity)
     ).first()
 
     if attendance:
