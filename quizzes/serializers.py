@@ -341,3 +341,24 @@ class QuizResultSerializer(serializers.Serializer):
     score = serializers.IntegerField()
     submitted_at = serializers.DateTimeField()
     questions = QuestionResultSerializer(many=True)
+
+
+class TeacherQuizAttemptSerializer(serializers.ModelSerializer):
+    student_id = serializers.UUIDField(source="student.id", read_only=True)
+    student_email = serializers.EmailField(
+        source="student.email", read_only=True)
+    student_name = serializers.CharField(
+        source="student.profile.full_name",
+        read_only=True
+    )
+
+    class Meta:
+        model = QuizAttempt
+        fields = [
+            "id",
+            "student_id",
+            "student_email",
+            "student_name",
+            "score",
+            "submitted_at",
+        ]

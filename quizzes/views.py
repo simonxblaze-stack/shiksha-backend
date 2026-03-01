@@ -1,3 +1,4 @@
+from django.db.models import Prefetch
 from rest_framework.exceptions import PermissionDenied
 from rest_framework import generics
 from django.shortcuts import get_object_or_404
@@ -21,6 +22,7 @@ from .serializers import (
     QuizSubmitSerializer,
     QuizDetailSerializer,
     QuizResultSerializer,
+
 
 )
 
@@ -460,4 +462,34 @@ class TeacherSubjectQuizListView(generics.ListAPIView):
             .filter(subject=subject)
             .annotate(total_attempts=Count("attempts"))
             .order_by("-created_at")
+        )
+
+
+class TeacherQuizAttemptsView(generics.ListAPIView):
+    permission_classes = [IsAuthenticated, IsEmailVerified]
+
+    def get_queryset(self):
+        user = self.request.user
+        quiz_id = self.kwargs["pk"]
+
+        if not user.has_role("TEACHER"):
+            raise PermissionDenied("Only teachers allowed.")
+
+        quiz = get_object_or_404(
+            Quiz.objects.select_related("subject"),
+            id=quiz_id
+        )
+
+        # ensure teacher owns subject
+        if not SubjectTeacher.objects.filter(
+            subject=quiz.subject,
+            teacher=user
+        ).exists():
+            raise PermissionDenied("Not assigned to this subject.")
+
+        return (
+            QuizAttempt.objects
+            .filter(quiz=quiz, status=QuizAttempt.STATUS_SUBMITTED)
+            .select_related("student", "student__profile")
+            .order_by("-submitted_at")
         )
