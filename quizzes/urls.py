@@ -31,7 +31,7 @@ urlpatterns = [
     # Student
     path("student/quizzes/", StudentDashboardView.as_view()),
     path("quizzes/<uuid:pk>/start/", StartQuizView.as_view()),
-    path("quiz-subjects/", StudentQuizSubjectsView.as_view()),
+    path("student/quiz-subjects/", StudentQuizSubjectsView.as_view()),
     path("quizzes/<uuid:pk>/submit/", SubmitQuizView.as_view()),
     path("quizzes/<uuid:pk>/", QuizDetailView.as_view()),
     path("quizzes/<uuid:pk>/result/", QuizResultView.as_view()),
