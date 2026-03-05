@@ -10,7 +10,8 @@ urlpatterns = [
     path("api/assignments/", include("assignments.urls")),
     path("api/", include("quizzes.urls")),
     path("api/livestream/", include("livestream.urls")),
-
+    path("api/dashboard/", include("dashboard.urls")),
+    path("api/activity/", include("activity.urls")),
 
 ]
 
