@@ -191,6 +191,8 @@ CSRF_TRUSTED_ORIGINS = [
     "https://api.shikshacom.com",
     "https://shikshacom.com",
     "https://www.shikshacom.com",
+    "https://app.shikshacom.com",
+    "https://teacher.shikshacom.com",
 ]
 CORS_ALLOWED_ORIGINS = [
     "https://shikshacom.com",
@@ -240,7 +242,8 @@ SECURE_CONTENT_TYPE_NOSNIFF = True
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
 SECURE_SSL_REDIRECT = True
-
+SESSION_COOKIE_SAMESITE = "None"
+CSRF_COOKIE_SAMESITE = "None"
 
 LIVEKIT_URL = os.getenv("LIVEKIT_URL")
 LIVEKIT_API_KEY = os.getenv("LIVEKIT_API_KEY")
