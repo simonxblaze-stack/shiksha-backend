@@ -353,8 +353,7 @@ class TeacherSubjectQuizListView(generics.ListAPIView):
             raise PermissionDenied("Not assigned to this subject.")
 
         return Quiz.objects.filter(
-            subject=subject,
-            is_published=True
+            subject=subject
         ).order_by("-created_at")
 
 
