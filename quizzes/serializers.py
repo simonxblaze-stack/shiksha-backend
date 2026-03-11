@@ -380,6 +380,8 @@ class TeacherQuizAnalyticsSerializer(serializers.ModelSerializer):
         read_only=True
     )
 
+    questions_count = serializers.SerializerMethodField()
+
     total_attempts = serializers.IntegerField(read_only=True)
     average_score = serializers.FloatField(read_only=True)
     highest_score = serializers.FloatField(read_only=True)
@@ -393,17 +395,22 @@ class TeacherQuizAnalyticsSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "title",
+            "created_at",        
             "subject_name",
             "course_title",
             "due_date",
             "is_published",
             "is_expired",
+            "questions_count",  
             "total_attempts",
             "submission_rate",
             "average_score",
             "highest_score",
             "lowest_score",
         ]
+
+    def get_questions_count(self, obj):
+        return obj.questions.count()
 
     def get_submission_rate(self, obj):
         total_students = obj.subject.course.enrollments.filter(
