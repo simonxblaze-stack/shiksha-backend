@@ -252,3 +252,11 @@ CSRF_COOKIE_DOMAIN = ".shikshacom.com"
 LIVEKIT_URL = os.getenv("LIVEKIT_URL")
 LIVEKIT_API_KEY = os.getenv("LIVEKIT_API_KEY")
 LIVEKIT_API_SECRET = os.getenv("LIVEKIT_API_SECRET")
+
+
+load_dotenv()
+
+BUNNY_LIBRARY_ID = os.getenv("BUNNY_LIBRARY_ID")
+BUNNY_API_KEY = os.getenv("BUNNY_API_KEY")
+BUNNY_STREAM_URL = os.getenv("BUNNY_STREAM_URL")
+BUNNY_EMBED = os.getenv("BUNNY_EMBED")
