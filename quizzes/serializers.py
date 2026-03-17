@@ -354,10 +354,14 @@ class QuizResultSerializer(serializers.Serializer):
 
 class TeacherQuizAttemptSerializer(serializers.ModelSerializer):
     student_id = serializers.UUIDField(source="student.id", read_only=True)
-    student_email = serializers.EmailField(
-        source="student.email", read_only=True)
+    student_email = serializers.EmailField(source="student.email", read_only=True)
     student_name = serializers.CharField(
         source="student.profile.full_name",
+        read_only=True
+    )
+
+    total_marks = serializers.IntegerField(
+        source="quiz.total_marks",
         read_only=True
     )
 
@@ -369,6 +373,7 @@ class TeacherQuizAttemptSerializer(serializers.ModelSerializer):
             "student_email",
             "student_name",
             "score",
+            "total_marks",  
             "submitted_at",
         ]
 

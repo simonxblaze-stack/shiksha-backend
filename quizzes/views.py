@@ -492,3 +492,43 @@ class TeacherQuizAttemptsView(generics.ListAPIView):
             .select_related("student", "student__profile")
             .order_by("-submitted_at")
         )
+class TeacherQuizAttemptDetailView(APIView):
+    permission_classes = [IsAuthenticated, IsEmailVerified]
+
+    def get(self, request, pk):
+        attempt = get_object_or_404(
+            QuizAttempt.objects.prefetch_related(
+                "answers__question__choices",
+                "answers__selected_choice",
+            ),
+            id=pk
+        )
+
+        # ensure teacher owns this quiz
+        if not SubjectTeacher.objects.filter(
+            subject=attempt.quiz.subject,
+            teacher=request.user
+        ).exists():
+            raise PermissionDenied("Not authorized.")
+
+        result_questions = []
+
+        for answer in attempt.answers.all():
+            correct_choice = answer.question.choices.filter(
+                is_correct=True
+            ).first()
+
+            result_questions.append({
+                "question": answer.question.text,
+                "options": [c.text for c in answer.question.choices.all()],
+                "selected": answer.selected_choice.text,
+                "correct": correct_choice.text if correct_choice else "",
+            })
+
+        return Response({
+            "student_name": attempt.student.profile.full_name,
+            "score": attempt.score,
+            "total": attempt.quiz.total_marks,
+            "submitted_at": attempt.submitted_at,
+            "questions": result_questions,
+        })
