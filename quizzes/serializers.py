@@ -309,16 +309,6 @@ class QuizDetailSerializer(serializers.ModelSerializer):
 
     questions = serializers.SerializerMethodField()
 
-    from django.db import models  # if not already
-
-total_marks = serializers.SerializerMethodField()
-
-def get_total_marks(self, obj):
-    return obj.questions.aggregate(
-        total=models.Sum("marks")
-    )["total"] or 0
-
-
     class Meta:
         model = Quiz
         fields = [
@@ -332,7 +322,6 @@ def get_total_marks(self, obj):
             "created_at",
             "time_limit_minutes",
             "questions",
-            "total_marks",
         ]
 
     def get_questions(self, obj):
