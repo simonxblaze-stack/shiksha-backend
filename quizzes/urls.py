@@ -11,6 +11,7 @@ from .views import (
     QuizResultView,
     StudentQuizSubjectsView,
     TeacherDeleteQuizView,
+    TeacherQuizAttemptDetailView,
     TeacherSubjectQuizListView,
     TeacherQuizAttemptsView
 
@@ -27,6 +28,10 @@ urlpatterns = [
          TeacherSubjectQuizListView.as_view()),
     path("teacher/quizzes/<uuid:pk>/attempts/",
          TeacherQuizAttemptsView.as_view()),
+    path(
+        "teacher/attempts/<uuid:pk>/",
+         TeacherQuizAttemptDetailView.as_view(),
+),
 
     # Student
     path("student/quizzes/", StudentDashboardView.as_view()),
