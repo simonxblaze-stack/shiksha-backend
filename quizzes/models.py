@@ -27,7 +27,7 @@ class Quiz(models.Model):
     description = models.TextField(blank=True)
 
     due_date = models.DateTimeField()
-    time_limit_minutes = models.PositiveIntegerField(null=True, blank=True)
+    time_limit_minutes = models.PositiveIntegerField(default=5)
 
     total_marks = models.PositiveIntegerField(default=0)
     is_published = models.BooleanField(default=False)

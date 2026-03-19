@@ -154,6 +154,7 @@ class QuizDashboardSerializer(serializers.ModelSerializer):
             "questions_count", 
             "status",
             "score",
+            "time_limit_minutes",
         ]
 
     def get_questions_count(self, obj):
@@ -431,6 +432,5 @@ class TeacherQuizAnalyticsSerializer(serializers.ModelSerializer):
         return obj.due_date <= timezone.now()
     
 
-    from rest_framework import serializers
-from .models import QuizAttempt
+
 
