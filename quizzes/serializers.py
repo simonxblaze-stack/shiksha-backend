@@ -44,7 +44,7 @@ class QuestionCreateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Question
-        fields = ["id", "text", "marks", "order", "choices"]
+        fields = ["id", "text", "marks", "order", "choices" , "explanation"]
         read_only_fields = ["id"]
 
     def validate(self, attrs):
@@ -56,6 +56,9 @@ class QuestionCreateSerializer(serializers.ModelSerializer):
         correct_count = sum(1 for c in choices if c.get("is_correct"))
         if correct_count != 1:
             raise ValidationError("Exactly one correct answer required.")
+        
+        if not attrs.get("explanation"):
+            raise ValidationError("Explanation is required.")
 
         return attrs
 
@@ -293,6 +296,7 @@ class QuestionPublicSerializer(serializers.ModelSerializer):
             "marks",
             "order",
             "choices",
+            "explanation",
         ]
 
 
@@ -431,6 +435,5 @@ class TeacherQuizAnalyticsSerializer(serializers.ModelSerializer):
         return obj.due_date <= timezone.now()
     
 
-    from rest_framework import serializers
-from .models import QuizAttempt
+
 
