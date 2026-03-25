@@ -67,7 +67,7 @@ class Question(models.Model):
     text = models.TextField()
     marks = models.PositiveIntegerField(default=1)
     order = models.PositiveIntegerField(default=0)
-    explanation = models.TextField()
+    explanation = models.TextField(blank=True, default="")
 
     created_at = models.DateTimeField(auto_now_add=True)
 
