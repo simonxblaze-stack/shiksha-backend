@@ -215,13 +215,6 @@ class QuizSubmitSerializer(serializers.Serializer):
         if quiz.due_date <= timezone.now():
             raise ValidationError("Quiz expired.")
 
-        if QuizAttempt.objects.filter(
-            quiz=quiz,
-            student=user,
-            status=QuizAttempt.STATUS_SUBMITTED
-        ).exists():
-            raise ValidationError("Quiz already submitted.")
-
         if len(attrs["answers"]) != quiz.questions.count():
             raise ValidationError("All questions must be answered.")
 
@@ -233,13 +226,15 @@ class QuizSubmitSerializer(serializers.Serializer):
         user = self.context["request"].user
         submitted_answers = self.validated_data["answers"]
 
-        attempt, _ = QuizAttempt.objects.select_for_update().get_or_create(
+        # ✅ FIXED: get latest pending attempt
+        attempt = QuizAttempt.objects.select_for_update().filter(
             quiz=quiz,
             student=user,
-        )
+            status=QuizAttempt.STATUS_PENDING,
+        ).order_by("-attempt_number").first()
 
-        if attempt.status == QuizAttempt.STATUS_SUBMITTED:
-            raise ValidationError("Quiz already submitted.")
+        if not attempt:
+            raise ValidationError("No active attempt found.")
 
         score = 0
         attempt.answers.all().delete()

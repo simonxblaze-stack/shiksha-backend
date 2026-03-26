@@ -142,9 +142,14 @@ class QuizAttempt(models.Model):
     submitted_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
-        
         indexes = [
             models.Index(fields=["student", "quiz"]),
+    ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["quiz", "student", "attempt_number"],
+                name="unique_attempt_per_number"
+            )
         ]
 
     def __str__(self):
