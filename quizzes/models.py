@@ -128,6 +128,8 @@ class QuizAttempt(models.Model):
         related_name="quiz_attempts",
     )
 
+    attempt_number = models.PositiveIntegerField(default=1)
+
     score = models.FloatField(default=0)
 
     status = models.CharField(
@@ -140,7 +142,7 @@ class QuizAttempt(models.Model):
     submitted_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
-        unique_together = ("quiz", "student")
+        
         indexes = [
             models.Index(fields=["student", "quiz"]),
         ]
