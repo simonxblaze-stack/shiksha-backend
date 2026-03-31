@@ -85,12 +85,26 @@ class AssignmentDetailSerializer(serializers.ModelSerializer):
     submission_status = serializers.SerializerMethodField()
     submitted_file = serializers.SerializerMethodField()
     submitted_at = serializers.SerializerMethodField()
+
     subject_name = serializers.CharField(
         source="chapter.subject.name",
         read_only=True
     )
+
     course_name = serializers.CharField(
         source="chapter.subject.course.title",
+        read_only=True
+    )
+
+    chapter_name = serializers.CharField(
+        source="chapter.title",
+        read_only=True
+    )
+
+    teacher_name = serializers.SerializerMethodField()
+
+    assigned_on = serializers.DateTimeField(
+        source="created_at",
         read_only=True
     )
 
@@ -102,8 +116,11 @@ class AssignmentDetailSerializer(serializers.ModelSerializer):
             "description",
             "attachment",
             "due_date",
+            "assigned_on",          # ✅ FIXED
+            "chapter_name",         # ✅ NEW
             "subject_name",
             "course_name",
+            "teacher_name",         # ✅ NEW
             "submission_status",
             "submitted_file",
             "submitted_at",
@@ -124,14 +141,29 @@ class AssignmentDetailSerializer(serializers.ModelSerializer):
         return "PENDING"
 
     def get_submitted_file(self, obj):
+        request = self.context.get("request")
         submission = self.get_submission(obj)
+
         if submission and submission.submitted_file:
-            return submission.submitted_file.url
+            # ✅ FULL URL FIX
+            return request.build_absolute_uri(
+                submission.submitted_file.url
+            )
+
         return None
 
     def get_submitted_at(self, obj):
         submission = self.get_submission(obj)
         return submission.submitted_at if submission else None
+
+    def get_teacher_name(self, obj):
+        subject = obj.chapter.subject
+        teacher = subject.subject_teachers.first()
+
+        if teacher and teacher.teacher.profile:
+            return teacher.teacher.profile.full_name
+
+        return None
 
 
 # ==========================================
