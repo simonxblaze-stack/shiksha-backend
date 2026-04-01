@@ -41,6 +41,9 @@ urlpatterns = [
         "student/subjects/<uuid:subject_id>/materials/",
         StudentSubjectMaterials.as_view(),
     ),
-    path("upload-file/", UploadMaterialFile.as_view()),
+    path(
+        "materials/upload-file/",
+        UploadMaterialFile.as_view(),
+    ),
 
 ]
