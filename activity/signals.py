@@ -122,4 +122,5 @@ def session_created(sender, instance, created, **kwargs):
             title=f"You scheduled session: {instance.title}",
             due_date=instance.start_time
         )
+
         
