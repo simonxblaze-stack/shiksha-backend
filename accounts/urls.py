@@ -8,6 +8,8 @@ from .views import (
     ResendVerificationEmailView,
     RefreshView,
     FormFillupView,
+    TeacherListView,
+    ValidateStudentIdView,
 )
 
 urlpatterns = [
@@ -19,4 +21,8 @@ urlpatterns = [
     path("resend-verification/", ResendVerificationEmailView.as_view()),
     path("refresh/", RefreshView.as_view()),
     path("form-fillup/", FormFillupView.as_view()),
+
+    # --- Private session support ---
+    path("teachers/", TeacherListView.as_view()),
+    path("student/<str:student_id>/validate/", ValidateStudentIdView.as_view()),
 ]

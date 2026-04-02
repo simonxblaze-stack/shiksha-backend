@@ -18,6 +18,7 @@ urlpatterns = [
     path("<uuid:session_id>/reschedule/", views.reschedule_request, name="private-session-reschedule"),
     path("<uuid:session_id>/start/", views.start_session, name="private-session-start"),
     path("<uuid:session_id>/end/", views.end_session, name="private-session-end"),
+    path("<uuid:session_id>/teacher-cancel/", views.teacher_cancel_session, name="private-session-teacher-cancel"),
 
     # --- Shared ---
     path("<uuid:session_id>/", views.session_detail, name="private-session-detail"),

@@ -2,13 +2,14 @@ import logging
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.db.models import Q
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from livestream.services import generate_livekit_token  # ← reuse existing
+from livestream.services import generate_livekit_token
 
 from .models import PrivateSession, SessionParticipant, SessionRescheduleHistory
 from .permissions import IsTeacher, IsStudent
@@ -16,6 +17,7 @@ from .serializers import (
     SessionListSerializer,
     PrivateSessionSerializer,
     SessionRequestSerializer,
+    get_user_name,
 )
 
 User = get_user_model()
@@ -78,12 +80,19 @@ def request_session(request):
 def student_sessions(request):
     """
     Return student's sessions filtered by tab query param.
+    Includes sessions where student is requester OR a group participant.
+
     ?tab=scheduled  → approved / ongoing / needs_reconfirmation
     ?tab=requests   → pending
     ?tab=history    → completed / cancelled / declined / expired / withdrawn / no_show
     """
     tab = request.query_params.get("tab", "scheduled")
-    qs = PrivateSession.objects.filter(requested_by=request.user)
+    user = request.user
+
+    # Sessions where user is requester OR a participant
+    qs = PrivateSession.objects.filter(
+        Q(requested_by=user) | Q(participants__user=user)
+    ).distinct()
 
     if tab == "scheduled":
         qs = qs.filter(status__in=["approved", "ongoing", "needs_reconfirmation"])
@@ -103,7 +112,7 @@ def student_sessions(request):
 @api_view(["POST"])
 @permission_classes([IsAuthenticated, IsStudent])
 def cancel_session(request, session_id):
-    """Student cancels a pending or approved session."""
+    """Student cancels a pending or approved session they requested."""
     try:
         session = PrivateSession.objects.get(pk=session_id, requested_by=request.user)
     except PrivateSession.DoesNotExist:
@@ -296,6 +305,27 @@ def reschedule_request(request, session_id):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated, IsTeacher])
+def teacher_cancel_session(request, session_id):
+    """Teacher cancels a pending, approved, or needs_reconfirmation session."""
+    try:
+        session = PrivateSession.objects.get(pk=session_id, teacher=request.user)
+    except PrivateSession.DoesNotExist:
+        return Response({"error": "Session not found."}, status=status.HTTP_404_NOT_FOUND)
+
+    if session.status not in ("pending", "approved", "needs_reconfirmation"):
+        return Response(
+            {"error": f"Cannot cancel a session with status '{session.status}'."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    session.status = "cancelled"
+    session.cancel_reason = request.data.get("reason", "Cancelled by teacher.")
+    session.save()
+    return Response(PrivateSessionSerializer(session).data)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsTeacher])
 def start_session(request, session_id):
     """
     Teacher starts an approved session.
@@ -378,10 +408,7 @@ def session_detail(request, session_id):
 def join_private_session(request, session_id):
     """
     Get a LiveKit token to join a private session.
-    Reuses livestream.services.generate_livekit_token().
-
-    The existing function expects a session object with .room_name,
-    so we pass our PrivateSession directly (it has that field).
+    Both teacher and students can publish audio/video in private sessions.
     """
     try:
         session = PrivateSession.objects.get(pk=session_id)
@@ -390,7 +417,6 @@ def join_private_session(request, session_id):
 
     user = request.user
 
-    # Check involvement
     is_teacher = (session.teacher == user)
     is_student = (
         session.requested_by == user
@@ -415,11 +441,16 @@ def join_private_session(request, session_id):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
+    # Use display name from profile (not AbstractUser's first/last)
+    display_name = get_user_name(user)
+
     try:
         token = generate_livekit_token(
             user=user,
-            session=session,       # has .room_name — same interface as LiveSession
+            session=session,
             is_teacher=is_teacher,
+            display_name=display_name,
+            allow_publish=True,  # Private sessions: everyone can publish
         )
     except Exception:
         logger.exception("LiveKit token generation failed for private session")

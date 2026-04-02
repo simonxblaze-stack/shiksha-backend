@@ -281,3 +281,39 @@ class TeacherFormFillupSerializer(serializers.Serializer):
 
         tp.save()
         return user
+    
+class TeacherListSerializer(serializers.Serializer):
+    """
+    Returns teacher info for the student request form.
+    Reads from User + Profile + TeacherProfile.
+    """
+    id = serializers.UUIDField(source="user.id")
+    name = serializers.SerializerMethodField()
+    subject = serializers.CharField(source="subject_specialization", default="")
+    qualification = serializers.CharField(default="")
+    rating = serializers.DecimalField(max_digits=3, decimal_places=2, default=None)
+    avatar = serializers.SerializerMethodField()
+
+    def get_name(self, obj):
+        profile = getattr(obj.user, "profile", None)
+        if profile and profile.full_name:
+            return profile.full_name
+        return obj.user.get_full_name() or obj.user.username
+
+    def get_avatar(self, obj):
+        profile = getattr(obj.user, "profile", None)
+        if profile:
+            return profile.avatar_value()
+        return None
+
+
+# =====================================================
+# STUDENT VALIDATION SERIALIZER (for group session form)
+# =====================================================
+
+class StudentValidationSerializer(serializers.Serializer):
+    """Returns basic info when validating a student ID."""
+    valid = serializers.BooleanField()
+    name = serializers.CharField()
+    user_id = serializers.UUIDField()
+    student_id = serializers.CharField()

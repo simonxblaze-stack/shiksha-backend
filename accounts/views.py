@@ -36,9 +36,10 @@ from .serializers import (
     UserMeSerializer,
     StudentFormFillupSerializer,
     TeacherFormFillupSerializer,
+    TeacherListSerializer,
 )
 
-from .models import TeacherProfile
+from .models import TeacherProfile, Profile
 
 from .permissions import IsEmailVerified
 
@@ -73,7 +74,6 @@ class MeView(APIView):
 # SIGNUP — PUBLIC
 # =====================================================
 
-
 class SignupView(APIView):
     permission_classes = [AllowAny]
 
@@ -83,7 +83,6 @@ class SignupView(APIView):
 
         user = serializer.save()
 
-        # 🔥 DELETE OLD TOKENS (important)
         EmailVerificationToken.objects.filter(user=user).delete()
 
         token = EmailVerificationToken.generate(user)
@@ -112,10 +111,10 @@ class SignupView(APIView):
             status=status.HTTP_201_CREATED,
         )
 
+
 # =====================================================
 # LOGIN — JWT ISSUED ONLY IF VERIFIED
 # =====================================================
-
 
 class LoginView(APIView):
     permission_classes = [AllowAny]
@@ -149,7 +148,6 @@ class LoginView(APIView):
             status=status.HTTP_200_OK,
         )
 
-        # Clear old cookies
         response.delete_cookie("access", domain=".shikshacom.com")
         response.delete_cookie("refresh", domain=".shikshacom.com")
 
@@ -236,7 +234,6 @@ class ResendVerificationEmailView(APIView):
         if user.is_verified:
             raise ValidationError("Email already verified.")
 
-        # 🔥 DELETE OLD TOKENS
         EmailVerificationToken.objects.filter(user=user).delete()
 
         token = EmailVerificationToken.generate(user)
@@ -266,10 +263,10 @@ class ResendVerificationEmailView(APIView):
 
         return Response({"detail": "Verification email resent."})
 
+
 # =====================================================
 # REQUEST TEACHER ROLE
 # =====================================================
-
 
 class RequestTeacherRoleView(APIView):
     permission_classes = [IsAuthenticated, IsEmailVerified]
@@ -477,3 +474,76 @@ class RefreshView(APIView):
 
         except (TokenError, User.DoesNotExist):
             return Response(status=status.HTTP_401_UNAUTHORIZED)
+
+
+# =====================================================
+# TEACHER LIST (for private session request form)
+# =====================================================
+
+class TeacherListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        qs = TeacherProfile.objects.filter(
+            is_approved=True,
+            user__user_roles__role__name="TEACHER",
+            user__user_roles__is_active=True,
+        ).select_related("user", "user__profile").distinct()
+
+        subject = request.query_params.get("subject", "").strip()
+        if subject:
+            qs = qs.filter(subject_specialization__icontains=subject)
+
+        data = []
+        for tp in qs:
+            profile = getattr(tp.user, "profile", None)
+            name = (profile.full_name if profile and profile.full_name
+                    else tp.user.get_full_name() or tp.user.username)
+            avatar = profile.avatar_value() if profile else None
+
+            data.append({
+                "id": str(tp.user.id),
+                "name": name,
+                "subject": tp.subject_specialization or "",
+                "qualification": tp.qualification or "",
+                "rating": float(tp.rating) if tp.rating else None,
+                "avatar": avatar,
+            })
+
+        return Response(data)
+
+
+# =====================================================
+# VALIDATE STUDENT ID (for group session form)
+# =====================================================
+
+class ValidateStudentIdView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, student_id):
+        try:
+            profile = Profile.objects.select_related("user").get(
+                student_id=student_id
+            )
+        except Profile.DoesNotExist:
+            return Response({
+                "valid": False,
+                "name": None,
+                "user_id": None,
+                "student_id": student_id,
+            })
+
+        if not profile.user.has_role("STUDENT"):
+            return Response({
+                "valid": False,
+                "name": None,
+                "user_id": None,
+                "student_id": student_id,
+            })
+
+        return Response({
+            "valid": True,
+            "name": profile.full_name or profile.user.username,
+            "user_id": str(profile.user.id),
+            "student_id": student_id,
+        })

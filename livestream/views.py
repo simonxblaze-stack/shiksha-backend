@@ -18,6 +18,7 @@ from rest_framework.response import Response
 from livekit.api import WebhookReceiver
 
 from enrollments.models import Enrollment
+from sessions_app.models import PrivateSession
 from .models import LiveSession, LiveSessionAttendance
 from .services import generate_livekit_token
 from .serializers import (
@@ -55,11 +56,9 @@ class StudentLiveSessionListView(generics.ListAPIView):
             .select_related("course", "subject", "created_by")
         )
 
-        # ✅ course filter
         if course_id:
             queryset = queryset.filter(course_id=course_id)
 
-         # ✅ subject filter (FIXED POSITION)
         if subject_id:
             queryset = queryset.filter(subject_id=subject_id)
 
@@ -88,7 +87,6 @@ class TeacherLiveSessionListView(generics.ListAPIView):
         if not subject_id:
             return LiveSession.objects.none()
 
-        # 🔐 verify teacher assigned
         if not user.subject_assignments.filter(subject_id=subject_id).exists():
             raise PermissionDenied("Not assigned to this subject.")
 
@@ -114,7 +112,6 @@ def join_live_session(request, session_id):
     session = get_object_or_404(LiveSession, id=session_id)
     now = timezone.now()
 
-    # 🚨 AUTO EXPIRE (NEW)
     if session.teacher_left_at:
         if now > session.teacher_left_at + timedelta(minutes=10):
             session.status = LiveSession.STATUS_COMPLETED
@@ -249,59 +246,96 @@ def livekit_webhook(request):
 
 @transaction.atomic
 def _handle_participant_join(event):
-    session = LiveSession.objects.filter(room_name=event.room.name).first()
-    if not session:
-        return
-
+    room_name = event.room.name
     user_id = str(event.participant.identity)
 
-    LiveSessionAttendance.objects.update_or_create(
-        session=session,
-        user_id=user_id,
-        defaults={"joined_at": timezone.now()}
-    )
+    # --- Regular livestream ---
+    session = LiveSession.objects.filter(room_name=room_name).first()
+    if session:
+        LiveSessionAttendance.objects.update_or_create(
+            session=session,
+            user_id=user_id,
+            defaults={"joined_at": timezone.now()}
+        )
 
-    # 🚨 If teacher joins → reset leave timer
-    if session.created_by and str(session.created_by.id) == user_id:
-        session.teacher_left_at = None
+        if session.created_by and str(session.created_by.id) == user_id:
+            session.teacher_left_at = None
+            if session.status != LiveSession.STATUS_LIVE:
+                session.status = LiveSession.STATUS_LIVE
+            session.save()
+        return
 
-        # 🚨 mark session LIVE
-        if session.status != LiveSession.STATUS_LIVE:
-            session.status = LiveSession.STATUS_LIVE
-
-        session.save()
+    # --- Private session ---
+    if room_name.startswith("private-"):
+        ps = PrivateSession.objects.filter(room_name=room_name).first()
+        if ps:
+            participant = ps.participants.filter(user_id=user_id).first()
+            if participant and not participant.joined_at:
+                participant.joined_at = timezone.now()
+                participant.save(update_fields=["joined_at"])
 
 
 @transaction.atomic
 def _handle_participant_left(event):
-    session = LiveSession.objects.filter(room_name=event.room.name).first()
-    if not session:
-        return
-
+    room_name = event.room.name
     user_id = str(event.participant.identity)
 
-    attendance = LiveSessionAttendance.objects.filter(
-        session=session,
-        user_id=user_id
-    ).first()
+    # --- Regular livestream ---
+    session = LiveSession.objects.filter(room_name=room_name).first()
+    if session:
+        attendance = LiveSessionAttendance.objects.filter(
+            session=session,
+            user_id=user_id
+        ).first()
 
-    if attendance:
-        attendance.left_at = timezone.now()
-        attendance.save()
+        if attendance:
+            attendance.left_at = timezone.now()
+            attendance.save()
 
-    # 🚨 teacher left → start expiry timer
-    if session.created_by and str(session.created_by.id) == user_id:
-        session.teacher_left_at = timezone.now()
-        session.save()
+        if session.created_by and str(session.created_by.id) == user_id:
+            session.teacher_left_at = timezone.now()
+            session.save()
+        return
+
+    # --- Private session ---
+    if room_name.startswith("private-"):
+        ps = PrivateSession.objects.filter(room_name=room_name).first()
+        if ps:
+            participant = ps.participants.filter(user_id=user_id).first()
+            if participant:
+                participant.left_at = timezone.now()
+                participant.save(update_fields=["left_at"])
 
 
 def _handle_room_started(event):
-    LiveSession.objects.filter(
-        room_name=event.room.name
+    """Handle room_started for both regular and private sessions."""
+    room_name = event.room.name
+
+    updated = LiveSession.objects.filter(
+        room_name=room_name
     ).update(status=LiveSession.STATUS_LIVE)
+
+    # Private sessions are already marked ongoing by start_session view,
+    # so no action needed — log for debugging.
+    if not updated and room_name.startswith("private-"):
+        logger.info(f"Private session room started: {room_name}")
 
 
 def _handle_room_finished(event):
-    LiveSession.objects.filter(
-        room_name=event.room.name
+    """Handle room_finished for both regular and private sessions."""
+    room_name = event.room.name
+
+    # Regular livestream rooms
+    updated = LiveSession.objects.filter(
+        room_name=room_name
     ).update(status=LiveSession.STATUS_COMPLETED)
+
+    # Private session rooms
+    if not updated and room_name.startswith("private-"):
+        PrivateSession.objects.filter(
+            room_name=room_name,
+            status="ongoing",
+        ).update(
+            status="completed",
+            ended_at=timezone.now(),
+        )
