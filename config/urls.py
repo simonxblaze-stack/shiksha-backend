@@ -11,7 +11,6 @@ urlpatterns = [
     path("api/", include("quizzes.urls")),
     path("api/livestream/", include("livestream.urls")),
     path("api/sessions/", include("sessions_app.urls")),
-    path("api/livekit/", include("livekit_app.urls")),
     path("api/dashboard/", include("dashboard.urls")),
     path("api/activity/", include("activity.urls")),
     path("api/materials/", include("materials.urls")),
