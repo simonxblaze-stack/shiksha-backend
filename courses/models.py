@@ -20,7 +20,7 @@ class Course(models.Model):
     )
 
     def __str__(self):
-        return self.title
+        return f"{self.title} [{self.board.name}]" if self.board else self.title
 
 
 class Subject(models.Model):
@@ -39,10 +39,15 @@ class Subject(models.Model):
 
     class Meta:
         ordering = ["order"]
-        unique_together = ("course", "name")
+        constraints = [
+            models.UniqueConstraint(
+                fields=["course", "name"],
+                name="unique_subject_per_course"
+            )
+        ]
 
     def __str__(self):
-        return f"{self.course.title} → {self.name}"
+        return f"{self.course} → {self.name}"   # ✅ improved
 
 
 class Chapter(models.Model):
@@ -61,7 +66,12 @@ class Chapter(models.Model):
 
     class Meta:
         ordering = ["order"]
-        unique_together = ("subject", "title")
+        constraints = [
+            models.UniqueConstraint(
+                fields=["subject", "title"],
+                name="unique_chapter_per_subject"
+            )
+        ]
 
     def __str__(self):
         return self.title
@@ -120,8 +130,13 @@ class SubjectTeacher(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        unique_together = ("subject", "teacher")
         ordering = ["order"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["subject", "teacher"],
+                name="unique_teacher_per_subject"
+            )
+        ]
 
     def __str__(self):
         return f"{self.subject.name} → {self.teacher.email}"
