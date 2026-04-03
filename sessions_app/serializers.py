@@ -61,6 +61,7 @@ class SessionListSerializer(serializers.ModelSerializer):
     student_id = serializers.SerializerMethodField()
     teacher_id = serializers.SerializerMethodField()
     requested_by_id = serializers.SerializerMethodField()
+    actual_duration_minutes = serializers.SerializerMethodField()
 
     class Meta:
         model = PrivateSession
@@ -73,6 +74,9 @@ class SessionListSerializer(serializers.ModelSerializer):
             "scheduled_date",
             "scheduled_time",
             "duration_minutes",
+            "started_at",
+            "ended_at",
+            "actual_duration_minutes",
             "teacher_name",
             "teacher_id",
             "student_name",
@@ -96,6 +100,13 @@ class SessionListSerializer(serializers.ModelSerializer):
     def get_requested_by_id(self, obj):
         return str(obj.requested_by_id)
 
+    def get_actual_duration_minutes(self, obj):
+        """Compute actual duration from started_at / ended_at timestamps."""
+        if obj.started_at and obj.ended_at:
+            delta = obj.ended_at - obj.started_at
+            return max(1, round(delta.total_seconds() / 60))
+        return None
+
 
 # ---------------------------------------------------------------------------
 # Detail serializer (full data, used in session detail views)
@@ -108,6 +119,7 @@ class PrivateSessionSerializer(serializers.ModelSerializer):
     teacher_id = serializers.SerializerMethodField()
     requested_by_id = serializers.SerializerMethodField()
     participants = ParticipantSerializer(many=True, read_only=True)
+    actual_duration_minutes = serializers.SerializerMethodField()
 
     class Meta:
         model = PrivateSession
@@ -137,6 +149,7 @@ class PrivateSessionSerializer(serializers.ModelSerializer):
             "updated_at",
             "started_at",
             "ended_at",
+            "actual_duration_minutes",
         ]
 
     def get_teacher_name(self, obj):
@@ -153,6 +166,13 @@ class PrivateSessionSerializer(serializers.ModelSerializer):
 
     def get_requested_by_id(self, obj):
         return str(obj.requested_by_id)
+
+    def get_actual_duration_minutes(self, obj):
+        """Compute actual duration from started_at / ended_at timestamps."""
+        if obj.started_at and obj.ended_at:
+            delta = obj.ended_at - obj.started_at
+            return max(1, round(delta.total_seconds() / 60))
+        return None
 
 
 # ---------------------------------------------------------------------------
