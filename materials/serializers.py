@@ -20,6 +20,8 @@ class MaterialFileSerializer(serializers.ModelSerializer):
         if request:
             return request.build_absolute_uri(obj.file.url)
         return obj.file.url
+    def get_file_size(self, obj):
+        size = obj.file.size  # bytes
 
 
 class StudyMaterialSerializer(serializers.ModelSerializer):
