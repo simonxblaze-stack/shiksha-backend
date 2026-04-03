@@ -1,18 +1,21 @@
-"""
-ASGI config for config project.
-"""
-
 import os
 
-from channels.routing import ProtocolTypeRouter
+from channels.routing import ProtocolTypeRouter, URLRouter
 from django.core.asgi import get_asgi_application
+from channels.auth import AuthMiddlewareStack
 
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
+import livestream.routing
 
-# 🔥 initialize Django ASGI app first
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+
 django_asgi_app = get_asgi_application()
 
-# 🔥 enable Channels (even if no websocket routes yet)
 application = ProtocolTypeRouter({
     "http": django_asgi_app,
+
+    "websocket": AuthMiddlewareStack(
+        URLRouter(
+            livestream.routing.websocket_urlpatterns
+        )
+    ),
 })
