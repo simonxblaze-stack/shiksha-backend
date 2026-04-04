@@ -6,9 +6,10 @@ from .models import Subject, Course, Board
 
 class SubjectSerializer(serializers.ModelSerializer):
     teachers = serializers.SerializerMethodField()
-    chapters = serializers.SerializerMethodField()   # ✅ added
-    stream_name = serializers.CharField(
-        source="course.stream.name", read_only=True)
+    chapters = serializers.SerializerMethodField()
+
+    stream_name = serializers.SerializerMethodField()
+    course_title = serializers.SerializerMethodField()
     board = serializers.SerializerMethodField()
 
     class Meta:
@@ -23,6 +24,16 @@ class SubjectSerializer(serializers.ModelSerializer):
             "course_title",
             "board",
         )
+
+    def get_stream_name(self, obj):
+        if obj.course and obj.course.stream:
+            return obj.course.stream.name
+        return ""
+
+    def get_course_title(self, obj):
+        if obj.course:
+            return obj.course.title
+        return ""
 
     def get_teachers(self, obj):
         subject_teachers = (
