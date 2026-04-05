@@ -11,7 +11,9 @@ def generate_private_token(user, session, display_name=None):
         settings.LIVEKIT_API_SECRET,
     )
 
-    token.with_identity(str(user.id))
+    # 🔥 FIX 1: unique identity per session
+    identity = f"{user.id}_{session.id}"
+    token.with_identity(identity)
 
     # display name
     if display_name is None:
@@ -23,24 +25,27 @@ def generate_private_token(user, session, display_name=None):
 
     token.with_name(display_name)
 
-    # 🔥 BOTH CAN SPEAK
+    # 🔥 FIX 2: proper role metadata
+    is_teacher = (session.teacher_id == user.id)
+
     token.with_metadata(json.dumps({
-        "role": "participant",  # 🔥 no presenter/viewer split
+        "role": "teacher" if is_teacher else "student",
         "type": "private_session",
         "user_id": str(user.id),
+        "session_id": str(session.id),
     }))
 
-    token.with_ttl(timedelta(hours=2))
+    # 🔥 FIX 3: safer TTL
+    token.with_ttl(timedelta(minutes=60))
 
     room_name = session.room_name
     if not room_name:
         raise ValueError("Session has no room_name")
 
-    # 🔥 EVERYONE CAN PUBLISH
     grants = VideoGrants(
         room_join=True,
         room=room_name,
-        can_publish=True,   # ✅ both teacher & student
+        can_publish=True,
         can_subscribe=True,
     )
 

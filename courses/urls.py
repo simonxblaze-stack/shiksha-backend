@@ -1,7 +1,7 @@
 from django.urls import path
 from .views import MyEnrolledCoursesView, CourseSubjectsView
 from .views import TeacherMyClassesView
-
+from .views import subject_teachers
 # update
 from .views import (
     CreateCourseView,
@@ -14,6 +14,7 @@ from .views import (
     SubjectStudentsView,
     TeacherAllStudentsView,
     SubjectsByCourseTitleView,
+    SubjectTeacher,
 )
 
 # recordings
@@ -110,4 +111,9 @@ urlpatterns = [
         "recordings/<uuid:recording_id>/",
         RecordingDetailView.as_view(),
     ),
+
+
+    urlpatterns += [
+        path("subjects/<uuid:subject_id>/teachers/", subject_teachers),
+    ]
 ]

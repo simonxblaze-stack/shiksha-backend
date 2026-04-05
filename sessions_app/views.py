@@ -1,3 +1,7 @@
+from courses.models import Subject, SubjectTeacher  # ✅ already using this app
+from courses.models import SubjectTeacher  # 🔥 CHANGE this import
+from django.utils.timezone import make_aware
+from datetime import datetime, timedelta
 import logging
 
 from django.conf import settings
@@ -38,14 +42,36 @@ def request_session(request):
     ser.is_valid(raise_exception=True)
     d = ser.validated_data
 
+    from courses.models import Subject, SubjectTeacher
+
+    # ✅ Validate subject
+    try:
+        subject_obj = Subject.objects.get(name=d["subject"])
+    except Subject.DoesNotExist:
+        return Response({"error": "Invalid subject"}, status=400)
+
+    # ✅ Validate teacher teaches subject
+    is_valid_teacher = SubjectTeacher.objects.filter(
+        subject=subject_obj,
+        teacher_id=d["teacher_id"]
+    ).exists()
+
+    if not is_valid_teacher:
+        return Response(
+            {"error": "This teacher does not teach the selected subject"},
+            status=400
+        )
+
+    # ✅ Fetch teacher
     try:
         teacher = User.objects.get(pk=d["teacher_id"])
     except User.DoesNotExist:
-        return Response({"error": "Teacher not found."}, status=status.HTTP_404_NOT_FOUND)
+        return Response({"error": "Teacher not found."}, status=404)
 
     if not teacher.has_role("TEACHER"):
-        return Response({"error": "Selected user is not a teacher."}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"error": "Selected user is not a teacher."}, status=400)
 
+    # ✅ Create session
     session = PrivateSession.objects.create(
         teacher=teacher,
         requested_by=request.user,
@@ -59,22 +85,30 @@ def request_session(request):
         status="pending",
     )
 
-    # Create participant entry for the requesting student
+    # ✅ Add main student
     SessionParticipant.objects.create(
-        session=session, user=request.user, role="student")
+        session=session,
+        user=request.user,
+        role="student"
+    )
 
-    # If group session, add extra student_ids as participants
+    # ✅ Add group students
     for sid in d.get("student_ids", []):
         try:
             extra = User.objects.get(profile__student_id=sid)
             if extra != request.user:
                 SessionParticipant.objects.get_or_create(
-                    session=session, user=extra, defaults={"role": "student"}
+                    session=session,
+                    user=extra,
+                    defaults={"role": "student"}
                 )
         except User.DoesNotExist:
-            pass  # silently skip invalid student IDs
+            pass
 
-    return Response(PrivateSessionSerializer(session).data, status=status.HTTP_201_CREATED)
+    return Response(
+        PrivateSessionSerializer(session).data,
+        status=status.HTTP_201_CREATED
+    )
 
 
 @api_view(["GET"])
@@ -579,3 +613,52 @@ def send_chat_message(request, session_id):
     )
 
     return Response(ChatMessageSerializer(chat_msg).data, status=status.HTTP_201_CREATED)
+
+
+# ==========================================================
+# SUBJECT → AVAILABLE TEACHERS
+# ==========================================================
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def subject_teachers(request, subject_id):
+    """
+    Get teachers for a subject.
+    Optional: filters out busy teachers.
+    """
+
+    date = request.query_params.get("date")
+    time = request.query_params.get("time")
+    duration = int(request.query_params.get("duration", 60))
+
+    qs = SubjectTeacher.objects.filter(
+        subject_id=subject_id
+    ).select_related("teacher", "teacher__profile")
+
+    # 🔥 Availability filtering (optional but included)
+    if date and time:
+        try:
+            start = make_aware(datetime.strptime(
+                f"{date} {time}", "%Y-%m-%d %H:%M"))
+            end = start + timedelta(minutes=duration)
+
+            busy_teachers = PrivateSession.objects.filter(
+                status__in=["approved", "ongoing"],
+                scheduled_date=date
+            ).values_list("teacher_id", flat=True)
+
+            qs = qs.exclude(teacher_id__in=busy_teachers)
+
+        except Exception:
+            pass
+
+    data = [
+        {
+            "id": str(st.teacher.id),
+            "name": getattr(st.teacher.profile, "full_name", st.teacher.username),
+        }
+        for st in qs
+    ]
+
+    return Response(data)
