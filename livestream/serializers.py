@@ -3,14 +3,14 @@ from django.utils import timezone
 from django.db.models import Q
 from datetime import timedelta
 import uuid
-from zoneinfo import ZoneInfo
 
 from .models import LiveSession
 from courses.models import Subject
 
-IST = ZoneInfo("Asia/Kolkata")
 
-
+# =========================
+# CREATE SERIALIZER
+# =========================
 class LiveSessionCreateSerializer(serializers.ModelSerializer):
     subject_id = serializers.UUIDField(write_only=True)
 
@@ -30,11 +30,17 @@ class LiveSessionCreateSerializer(serializers.ModelSerializer):
         request = self.context.get("request")
         user = request.user
 
+        # =========================
+        # ROLE CHECK
+        # =========================
         if not user.has_role("TEACHER"):
             raise serializers.ValidationError(
                 {"non_field_errors": ["Only teachers can schedule sessions."]}
             )
 
+        # =========================
+        # SUBJECT VALIDATION
+        # =========================
         try:
             subject = Subject.objects.select_related("course").get(
                 id=data["subject_id"]
@@ -52,17 +58,23 @@ class LiveSessionCreateSerializer(serializers.ModelSerializer):
         start_time = data["start_time"]
         end_time = data["end_time"]
 
+        # =========================
+        # TIMEZONE FIX (SAFE)
+        # =========================
         if timezone.is_naive(start_time):
-            start_time = timezone.make_aware(start_time, IST)
+            start_time = timezone.make_aware(start_time)
 
         if timezone.is_naive(end_time):
-            end_time = timezone.make_aware(end_time, IST)
+            end_time = timezone.make_aware(end_time)
 
         data["start_time"] = start_time
         data["end_time"] = end_time
 
         now = timezone.now()
 
+        # =========================
+        # BASIC VALIDATION
+        # =========================
         if start_time >= end_time:
             raise serializers.ValidationError(
                 {"end_time": ["End time must be after start time."]}
@@ -73,18 +85,40 @@ class LiveSessionCreateSerializer(serializers.ModelSerializer):
                 {"start_time": ["Cannot schedule a session in the past."]}
             )
 
-        overlap_exists = LiveSession.objects.filter(
-            subject=subject
-        ).filter(
-            Q(start_time__lt=end_time) &
-            Q(end_time__gt=start_time)
-        ).exists()
+        # =========================
+        # OVERLAP CHECK (CRITICAL)
+        # =========================
+        conflict = (
+            LiveSession.objects
+            .filter(
+                subject=subject,
+                created_by=user,
+            )
+            .exclude(
+                status__in=[
+                    LiveSession.STATUS_CANCELLED,
+                    LiveSession.STATUS_COMPLETED,
+                ]
+            )
+            .filter(
+                Q(start_time__lt=end_time) &
+                Q(end_time__gt=start_time)
+            )
+            .order_by("start_time")
+            .first()
+        )
 
-        if overlap_exists:
+        if conflict:
+            start_str = timezone.localtime(
+                conflict.start_time).strftime('%d %b %H:%M')
+            end_str = timezone.localtime(conflict.end_time).strftime('%H:%M')
+
             raise serializers.ValidationError(
-                {"non_field_errors": [
-                    "This session overlaps with an existing session."
-                ]}
+                {
+                    "non_field_errors": [
+                        f"Conflicts with another session: {conflict.title} ({start_str} - {end_str})"
+                    ]
+                }
             )
 
         self._validated_subject = subject
@@ -107,6 +141,9 @@ class LiveSessionCreateSerializer(serializers.ModelSerializer):
         )
 
 
+# =========================
+# LIST SERIALIZER
+# =========================
 class LiveSessionListSerializer(serializers.ModelSerializer):
     teacher = serializers.CharField(source="created_by.email", read_only=True)
     can_join = serializers.SerializerMethodField()
@@ -131,41 +168,31 @@ class LiveSessionListSerializer(serializers.ModelSerializer):
             "course_name",
         ]
 
+    # =========================
+    # 🔥 SINGLE SOURCE OF TRUTH
+    # =========================
     def get_computed_status(self, obj):
-        now = timezone.now()
+        return obj.computed_status()
 
-        if obj.status == LiveSession.STATUS_CANCELLED:
-            return "CANCELLED"
-
-        # ✅ FIX: use 60 min window (match backend)
-        if obj.teacher_left_at:
-            if now > obj.teacher_left_at + timedelta(minutes=60):
-                return "COMPLETED"
-            return "PAUSED"
-
-        if obj.status == LiveSession.STATUS_LIVE:
-            return "LIVE"
-
-        if now < obj.start_time:
-            return "SCHEDULED"
-
-        return "WAITING_FOR_TEACHER"
-
+    # =========================
+    # JOIN LOGIC (ALIGNED)
+    # =========================
     def get_can_join(self, obj):
+        request = self.context.get("request")
         now = timezone.now()
 
-        if obj.status == LiveSession.STATUS_CANCELLED:
+        status = obj.computed_status()
+
+        # 🚫 hard blocks
+        if status in [
+            LiveSession.STATUS_CANCELLED,
+            LiveSession.STATUS_COMPLETED,
+        ]:
             return False
 
-        # ✅ FIX: 60 min rule
-        if obj.teacher_left_at:
-            if now > obj.teacher_left_at + timedelta(minutes=60):
-                return False
-
-        request = self.context.get("request")
-
+        # 👨‍🏫 teacher always allowed
         if request and request.user.has_role("TEACHER"):
             return True
 
-        # ✅ FIX: remove end_time dependency
+        # 👨‍🎓 student join window
         return now >= obj.start_time - timedelta(minutes=15)

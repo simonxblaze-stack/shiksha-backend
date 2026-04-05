@@ -151,33 +151,23 @@ def join_live_session(request, session_id):
     session = get_object_or_404(LiveSession, id=session_id)
     now = timezone.now()
 
-    # 🚫 CANCELLED
-    if session.status == LiveSession.STATUS_CANCELLED:
+    # 🔥 SINGLE SOURCE OF TRUTH
+    status = session.computed_status()
+
+    # =========================
+    # 🚫 HARD BLOCKS
+    # =========================
+    if status == LiveSession.STATUS_CANCELLED:
         return Response({"detail": "Session cancelled"}, status=400)
 
-    # ==================================================
-    # 🔥 TEACHER DISCONNECT / EXPIRY LOGIC (CENTRALIZED)
-    # ==================================================
-    if session.teacher_left_at:
-        diff = now - session.teacher_left_at
-
-        # ❌ permanently ended
-        if diff > timedelta(minutes=60):
-            if session.status != LiveSession.STATUS_COMPLETED:
-                session.status = LiveSession.STATUS_COMPLETED
-                session.save(update_fields=["status"])  # ✅ FIX
-
-            return Response(
-                {"detail": "Session permanently ended"},
-                status=403
-            )
+    if status == LiveSession.STATUS_COMPLETED:
+        return Response({"detail": "Session ended"}, status=403)
 
     # =========================
     # 👨‍🎓 STUDENT
     # =========================
     if user.has_role("STUDENT"):
 
-        # ✅ enrollment check FIRST
         is_enrolled = Enrollment.objects.filter(
             user=user,
             course=session.course,
@@ -187,19 +177,9 @@ def join_live_session(request, session_id):
         if not is_enrolled:
             return Response({"detail": "Not enrolled"}, status=403)
 
-        # 🔥 early join restriction
+        # 🔥 early join window
         if now < session.start_time - timedelta(minutes=15):
             return Response({"detail": "Too early"}, status=403)
-
-        # 🔥 optional: block if teacher gone too long
-        if session.teacher_left_at:
-            diff = now - session.teacher_left_at
-
-            if diff > timedelta(minutes=60):
-                return Response(
-                    {"detail": "Session ended"},
-                    status=403
-                )
 
         is_teacher = False
 
@@ -211,11 +191,10 @@ def join_live_session(request, session_id):
         if not session.subject.subject_teachers.filter(teacher=user).exists():
             return Response({"detail": "Not assigned"}, status=403)
 
-        # 🔥 ONLY CREATOR IS PRESENTER
         is_creator = str(session.created_by_id) == str(user.id)
-        is_teacher = is_creator  # presenter only if creator
+        is_teacher = is_creator
 
-        # 🔥 REVIVE SESSION (only creator matters)
+        # 🔥 RECONNECT / REVIVE LOGIC (clean)
         if is_creator and session.teacher_left_at:
             if now <= session.teacher_left_at + timedelta(minutes=30):
                 session.teacher_left_at = None
@@ -241,10 +220,11 @@ def join_live_session(request, session_id):
         "role": "PRESENTER" if is_teacher else "STUDENT",
     })
 
-
 # =========================
 # CREATE SESSION
 # =========================
+
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def create_live_session(request):

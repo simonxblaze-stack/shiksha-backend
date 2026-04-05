@@ -99,32 +99,30 @@ class LiveSession(models.Model):
         if self.status == self.STATUS_CANCELLED:
             return self.STATUS_CANCELLED
 
-        # 2️⃣ Teacher left logic (highest priority)
+        # 2️⃣ Teacher disconnect logic (with safety)
         if self.teacher_left_at:
-            diff = now - self.teacher_left_at
+            if self.status != self.STATUS_LIVE:
+                diff = now - self.teacher_left_at
 
-            if diff <= timedelta(minutes=10):
-                return self.STATUS_RECONNECTING
+                if diff <= timedelta(minutes=10):
+                    return self.STATUS_RECONNECTING
 
-            if diff <= timedelta(minutes=60):
-                return self.STATUS_PAUSED
+                if diff <= timedelta(minutes=60):
+                    return self.STATUS_PAUSED
 
-            return self.STATUS_COMPLETED
+                return self.STATUS_COMPLETED
 
-        # 3️⃣ Live session
-        if self.status == self.STATUS_LIVE:
-            if now <= self.end_time:
-                return self.STATUS_LIVE
-            return self.STATUS_COMPLETED
-        # 4️⃣ Scheduled
+        # 3️⃣ Scheduled (future)
         if now < self.start_time:
             return self.STATUS_SCHEDULED
 
-        # 5️⃣ Waiting (only before end_time)
+        # 4️⃣ Active window
         if now <= self.end_time:
+            if self.status == self.STATUS_LIVE:
+                return self.STATUS_LIVE
             return self.STATUS_WAITING
 
-        # 6️⃣ Fallback → completed
+        # 5️⃣ Finished
         return self.STATUS_COMPLETED
 
 
