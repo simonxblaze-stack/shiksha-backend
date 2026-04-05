@@ -3,12 +3,10 @@ from django.utils import timezone
 from django.db.models import Q
 from datetime import timedelta
 import uuid
-from zoneinfo import ZoneInfo
+
 
 from .models import LiveSession
 from courses.models import Subject
-
-IST = ZoneInfo("Asia/Kolkata")
 
 
 class LiveSessionCreateSerializer(serializers.ModelSerializer):
@@ -52,11 +50,16 @@ class LiveSessionCreateSerializer(serializers.ModelSerializer):
         start_time = data["start_time"]
         end_time = data["end_time"]
 
+        # ✅ Ensure aware datetime (NO IST forcing)
         if timezone.is_naive(start_time):
-            start_time = timezone.make_aware(start_time, IST)
+            start_time = timezone.make_aware(start_time)
 
         if timezone.is_naive(end_time):
-            end_time = timezone.make_aware(end_time, IST)
+            end_time = timezone.make_aware(end_time)
+
+        # ✅ Normalize to UTC (CRITICAL)
+        start_time = start_time.astimezone(timezone.utc)
+        end_time = end_time.astimezone(timezone.utc)
 
         data["start_time"] = start_time
         data["end_time"] = end_time
@@ -90,9 +93,8 @@ class LiveSessionCreateSerializer(serializers.ModelSerializer):
         if conflict:
             raise serializers.ValidationError(
                 {"non_field_errors": [
-                    f"Conflicts with another session: {conflict.title} "
-                    f"({conflict.start_time.strftime('%d %b %H:%M')} - "
-                    f"{conflict.end_time.strftime('%H:%M')})"
+                    f"Conflicts with another session: {conflict.title} ({start_str} - {end_str})"
+
                 ]}
             )
         self._validated_subject = subject
