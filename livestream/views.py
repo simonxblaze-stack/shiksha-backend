@@ -151,23 +151,33 @@ def join_live_session(request, session_id):
     session = get_object_or_404(LiveSession, id=session_id)
     now = timezone.now()
 
-    # 🔥 SINGLE SOURCE OF TRUTH
-    status = session.computed_status()
-
-    # =========================
-    # 🚫 HARD BLOCKS
-    # =========================
-    if status == LiveSession.STATUS_CANCELLED:
+    # 🚫 CANCELLED
+    if session.status == LiveSession.STATUS_CANCELLED:
         return Response({"detail": "Session cancelled"}, status=400)
 
-    if status == LiveSession.STATUS_COMPLETED:
-        return Response({"detail": "Session ended"}, status=403)
+    # ==================================================
+    # 🔥 TEACHER DISCONNECT / EXPIRY LOGIC (CENTRALIZED)
+    # ==================================================
+    if session.teacher_left_at:
+        diff = now - session.teacher_left_at
+
+        # ❌ permanently ended
+        if diff > timedelta(minutes=60):
+            if session.status != LiveSession.STATUS_COMPLETED:
+                session.status = LiveSession.STATUS_COMPLETED
+                session.save(update_fields=["status"])  # ✅ FIX
+
+            return Response(
+                {"detail": "Session permanently ended"},
+                status=403
+            )
 
     # =========================
     # 👨‍🎓 STUDENT
     # =========================
     if user.has_role("STUDENT"):
 
+        # ✅ enrollment check FIRST
         is_enrolled = Enrollment.objects.filter(
             user=user,
             course=session.course,
@@ -177,9 +187,19 @@ def join_live_session(request, session_id):
         if not is_enrolled:
             return Response({"detail": "Not enrolled"}, status=403)
 
-        # 🔥 early join window
+        # 🔥 early join restriction
         if now < session.start_time - timedelta(minutes=15):
             return Response({"detail": "Too early"}, status=403)
+
+        # 🔥 optional: block if teacher gone too long
+        if session.teacher_left_at:
+            diff = now - session.teacher_left_at
+
+            if diff > timedelta(minutes=60):
+                return Response(
+                    {"detail": "Session ended"},
+                    status=403
+                )
 
         is_teacher = False
 
@@ -191,10 +211,11 @@ def join_live_session(request, session_id):
         if not session.subject.subject_teachers.filter(teacher=user).exists():
             return Response({"detail": "Not assigned"}, status=403)
 
+        # 🔥 ONLY CREATOR IS PRESENTER
         is_creator = str(session.created_by_id) == str(user.id)
-        is_teacher = is_creator
+        is_teacher = is_creator  # presenter only if creator
 
-        # 🔥 RECONNECT / REVIVE LOGIC (clean)
+        # 🔥 REVIVE SESSION (only creator matters)
         if is_creator and session.teacher_left_at:
             if now <= session.teacher_left_at + timedelta(minutes=30):
                 session.teacher_left_at = None
@@ -220,11 +241,10 @@ def join_live_session(request, session_id):
         "role": "PRESENTER" if is_teacher else "STUDENT",
     })
 
+
 # =========================
 # CREATE SESSION
 # =========================
-
-
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def create_live_session(request):
@@ -234,27 +254,7 @@ def create_live_session(request):
     )
 
     if serializer.is_valid():
-        start_time = serializer.validated_data["start_time"]
-        now = timezone.now()
-
-        # 🔥 SUPPORT START NOW + FORCE LIVE
-        force_live = request.data.get("force_live", False)
-
-        if force_live or start_time <= now:
-            status = LiveSession.STATUS_LIVE
-        else:
-            status = LiveSession.STATUS_SCHEDULED
-
-        session = serializer.save(
-            created_by=request.user,
-            status=status
-        )
-
-        # 🔥 ensure teacher_left_at cleared if starting live
-        if status == LiveSession.STATUS_LIVE:
-            session.teacher_left_at = None
-            session.save(update_fields=["teacher_left_at"])
-
+        session = serializer.save()
         return Response(
             {
                 "id": session.id,
@@ -265,11 +265,11 @@ def create_live_session(request):
         )
 
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
 # =========================
 # CANCEL SESSION
 # =========================
-
-
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def cancel_live_session(request, session_id):
