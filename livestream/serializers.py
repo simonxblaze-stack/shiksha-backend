@@ -73,20 +73,28 @@ class LiveSessionCreateSerializer(serializers.ModelSerializer):
                 {"start_time": ["Cannot schedule a session in the past."]}
             )
 
-        overlap_exists = LiveSession.objects.filter(
-            subject=subject
+        # 🔥 PRODUCTION OVERLAP CHECK (SINGLE QUERY)
+        conflict = LiveSession.objects.filter(
+            subject=subject,
+            created_by=user,
+        ).exclude(
+            status__in=[
+                LiveSession.STATUS_CANCELLED,
+                LiveSession.STATUS_COMPLETED,
+            ]
         ).filter(
             Q(start_time__lt=end_time) &
             Q(end_time__gt=start_time)
-        ).exists()
+        ).order_by("start_time").first()
 
-        if overlap_exists:
+        if conflict:
             raise serializers.ValidationError(
                 {"non_field_errors": [
-                    "This session overlaps with an existing session."
+                    f"Conflicts with another session: {conflict.title} "
+                    f"({conflict.start_time.strftime('%d %b %H:%M')} - "
+                    f"{conflict.end_time.strftime('%H:%M')})"
                 ]}
             )
-
         self._validated_subject = subject
         return data
 
