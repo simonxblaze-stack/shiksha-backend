@@ -352,6 +352,7 @@ class FormFillupView(APIView):
             data = {
                 "form_type": "teacher",
                 "email": user.email,
+                "username": user.username,
 
                 # Personal info (from Profile)
                 "first_name": profile.first_name or "",
@@ -417,6 +418,7 @@ class FormFillupView(APIView):
             data = {
                 "form_type": "student",
                 "email": user.email,
+                "username": user.username,
 
                 # Personal info
                 "first_name": profile.first_name or "",
