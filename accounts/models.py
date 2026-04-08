@@ -636,10 +636,9 @@ class TeacherProfile(models.Model):
             and self.id_number
             and self.id_proof_front
         )
-        has_course = bool(
-            self.subject
-            and self.boards
-            and self.classes
+        has_applications = (
+            self.course_applications.exists()
+            or self.skill_applications.exists()
         )
 
         return bool(
@@ -648,8 +647,47 @@ class TeacherProfile(models.Model):
             and has_qualifications
             and has_experience
             and has_verification
-            and has_course
+            and has_applications
         )
+
 
     def __str__(self):
         return f"TeacherProfile -> {self.user.email}"
+
+class TeacherCourseApplication(models.Model):
+    teacher_profile = models.ForeignKey(
+        TeacherProfile, on_delete=models.CASCADE, related_name="course_applications"
+    )
+    subject = models.CharField(max_length=50, choices=TeacherProfile.SUBJECT_CHOICES)
+    boards = models.JSONField(default=list)
+    classes = models.JSONField(default=list)
+    streams = models.JSONField(default=list, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at"]
+
+    def __str__(self):
+        return f"{self.teacher_profile.user.email} - {self.get_subject_display()}"
+
+
+class TeacherSkillApplication(models.Model):
+    teacher_profile = models.ForeignKey(
+        TeacherProfile, on_delete=models.CASCADE, related_name="skill_applications"
+    )
+    skill_name = models.CharField(max_length=200)
+    skill_description = models.CharField(max_length=500)
+    skill_related_subject = models.CharField(
+        max_length=50, choices=TeacherProfile.SUBJECT_CHOICES
+    )
+    supporting_file = models.FileField(
+        upload_to="teachers/skills/files/", null=True, blank=True
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at"]
+
+    def __str__(self):
+        return f"{self.teacher_profile.user.email} - {self.skill_name}"
+

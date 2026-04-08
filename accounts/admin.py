@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
-from .models import User, Profile, Role, UserRole, TeacherProfile
+from .models import User, Profile, Role, UserRole, TeacherProfile, TeacherCourseApplication, TeacherSkillApplication
 
 
 # =========================
@@ -138,6 +138,15 @@ class UserRoleAdmin(admin.ModelAdmin):
 # =========================
 # TEACHER PROFILE ADMIN
 # =========================
+class TeacherCourseApplicationInline(admin.TabularInline):
+    model = TeacherCourseApplication
+    extra = 0
+
+
+class TeacherSkillApplicationInline(admin.TabularInline):
+    model = TeacherSkillApplication
+    extra = 0
+
 
 @admin.register(TeacherProfile)
 class TeacherProfileAdmin(admin.ModelAdmin):
@@ -147,7 +156,6 @@ class TeacherProfileAdmin(admin.ModelAdmin):
         "field_of_study",
         "experience_range",
         "employment_status",
-        "subject",
         "is_approved",
         "is_complete",
     )
@@ -157,7 +165,6 @@ class TeacherProfileAdmin(admin.ModelAdmin):
         "highest_degree",
         "experience_range",
         "employment_status",
-        "subject",
         "govt_id_type",
     )
     search_fields = (
@@ -166,6 +173,8 @@ class TeacherProfileAdmin(admin.ModelAdmin):
         "id_number",
         "skill_name",
     )
+
+    inlines = [TeacherCourseApplicationInline, TeacherSkillApplicationInline]
 
     fieldsets = (
         ("User", {
@@ -193,16 +202,15 @@ class TeacherProfileAdmin(admin.ModelAdmin):
                 "id_proof_front", "id_proof_back",
             ),
         }),
-        ("Course Application", {
-            "fields": ("subject", "boards", "classes", "streams"),
-        }),
-        ("Skill Application", {
-            "fields": (
-                "skill_name", "skill_description", "skill_related_subject",
-                "skill_supporting_image", "skill_supporting_video",
-            ),
+        
+        ("Course & Skill Applications (Legacy - see inlines below)", {
+            "fields": ("subject", "boards", "classes", "streams",
+                       "skill_name", "skill_description", "skill_related_subject",
+                       "skill_supporting_image", "skill_supporting_video"),
             "classes": ("collapse",),
         }),
+
+
         ("Legacy Form Fillup Fields", {
             "fields": (
                 "gender", "date_of_birth",

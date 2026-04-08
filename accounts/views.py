@@ -41,7 +41,7 @@ from .serializers import (
     ChangePasswordSerializer,
 )
 
-from .models import TeacherProfile, Profile
+from .models import TeacherProfile, Profile , TeacherCourseApplication, TeacherSkillApplication
 
 from .permissions import IsEmailVerified
 
@@ -395,24 +395,33 @@ class FormFillupView(APIView):
                     tp.id_proof_back.url if tp and tp.id_proof_back else None
                 ),
 
-                # Course Application
-                "subject": tp.subject if tp else "",
-                "boards": tp.boards if tp else [],
-                "classes": tp.classes if tp else [],
-                "streams": tp.streams if tp else [],
+                # Course Applications
+                "course_applications": [
+                    {
+                        "id": ca.id,
+                        "subject": ca.subject,
+                        "boards": ca.boards,
+                        "classes": ca.classes,
+                        "streams": ca.streams,
+                    }
+                    for ca in (tp.course_applications.all() if tp else [])
+                ],
 
-                # Skill Application
-                "skill_name": tp.skill_name if tp else "",
-                "skill_description": tp.skill_description if tp else "",
-                "skill_related_subject": tp.skill_related_subject if tp else "",
-                "skill_supporting_image": (
-                    tp.skill_supporting_image.url
-                    if tp and tp.skill_supporting_image else None
-                ),
-                "skill_supporting_video": (
-                    tp.skill_supporting_video.url
-                    if tp and tp.skill_supporting_video else None
-                ),
+                # Skill Applications
+                "skill_applications": [
+                    {
+                        "id": sa.id,
+                        "skill_name": sa.skill_name,
+                        "skill_description": sa.skill_description,
+                        "skill_related_subject": sa.skill_related_subject,
+                        "skill_supporting_file": (
+                            sa.skill_supporting_file.url
+                            if sa.skill_supporting_file else None
+                        ),
+                    }
+                    for sa in (tp.skill_applications.all() if tp else [])
+                ],
+
             }
         else:
             data = {
@@ -462,7 +471,9 @@ class FormFillupView(APIView):
         is_teacher = self._is_teacher(user)
 
         if is_teacher:
-            serializer = TeacherFormFillupSerializer(data=request.data)
+            serializer = TeacherFormFillupSerializer(
+                data=request.data, context={"request": request}
+            )
             serializer.is_valid(raise_exception=True)
             serializer.update(user, serializer.validated_data)
         else:

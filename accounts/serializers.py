@@ -1,11 +1,12 @@
-from datetime import date
+import json
 
+from datetime import date
 from rest_framework import serializers
 from django.contrib.auth.password_validation import validate_password
 from rest_framework.exceptions import ValidationError
 from django.db import transaction
 
-from .models import User, Profile, Role, UserRole, TeacherProfile
+from .models import User, Profile, Role, UserRole, TeacherProfile, TeacherCourseApplication, TeacherSkillApplication
 
 
 # =====================================================
@@ -365,36 +366,11 @@ class TeacherFormFillupSerializer(serializers.Serializer):
     id_proof_front = serializers.FileField(required=True)
     id_proof_back = serializers.FileField(required=False, allow_null=True)
 
-    # --- Course Application ---
-    subject = serializers.ChoiceField(
-        choices=TeacherProfile.SUBJECT_CHOICES, required=False, allow_blank=True
-    )
-    boards = serializers.ListField(
-        child=serializers.CharField(max_length=10),
-        required=False,
-        allow_empty=True,
-    )
-    classes = serializers.ListField(
-        child=serializers.CharField(max_length=5),
-        required=False,
-        allow_empty=True,
-    )
-    streams = serializers.ListField(
-        child=serializers.CharField(max_length=20),
-        required=False,
-        allow_empty=True,
-    )
+        # --- Course Applications (JSON string) ---
+    course_applications = serializers.CharField(required=False, default="[]")
 
-    # --- Skill Application ---
-    skill_name = serializers.CharField(max_length=200, required=False, allow_blank=True)
-    skill_description = serializers.CharField(
-        max_length=500, required=False, allow_blank=True
-    )
-    skill_related_subject = serializers.ChoiceField(
-        choices=TeacherProfile.SUBJECT_CHOICES, required=False, allow_blank=True
-    )
-    skill_supporting_image = serializers.ImageField(required=False, allow_null=True)
-    skill_supporting_video = serializers.FileField(required=False, allow_null=True)
+    # --- Skill Applications (JSON string) ---
+    skill_applications = serializers.CharField(required=False, default="[]")
 
     def validate_qualification_certificate(self, value):
         if value and value.size > 5 * 1024 * 1024:
@@ -411,42 +387,63 @@ class TeacherFormFillupSerializer(serializers.Serializer):
             raise ValidationError("ID proof must be under 5MB.")
         return value
 
-    def validate_skill_supporting_image(self, value):
-        if value and value.size > 10 * 1024 * 1024:
-            raise ValidationError("Supporting image must be under 10MB.")
-        return value
+    def validate_course_applications(self, value):
+        try:
+            data = json.loads(value) if isinstance(value, str) else value
+        except (json.JSONDecodeError, TypeError):
+            raise ValidationError("Invalid JSON for course applications.")
+        if not isinstance(data, list):
+            raise ValidationError("Course applications must be a list.")
+        valid_subjects = [c[0] for c in TeacherProfile.SUBJECT_CHOICES]
+        valid_boards = [c[0] for c in TeacherProfile.BOARD_CHOICES]
+        valid_classes = [c[0] for c in TeacherProfile.CLASS_CHOICES]
+        for i, entry in enumerate(data):
+            if not entry.get("subject"):
+                raise ValidationError(f"Entry {i+1}: Subject is required.")
+            if entry["subject"] not in valid_subjects:
+                raise ValidationError(f"Entry {i+1}: Invalid subject.")
+            boards = entry.get("boards", [])
+            if not boards:
+                raise ValidationError(f"Entry {i+1}: At least one board is required.")
+            for b in boards:
+                if b not in valid_boards:
+                    raise ValidationError(f"Entry {i+1}: Invalid board '{b}'.")
+            classes = entry.get("classes", [])
+            if not classes:
+                raise ValidationError(f"Entry {i+1}: At least one class is required.")
+            for c in classes:
+                if c not in valid_classes:
+                    raise ValidationError(f"Entry {i+1}: Invalid class '{c}'.")
+            if ("11" in classes or "12" in classes) and not entry.get("streams"):
+                raise ValidationError(f"Entry {i+1}: Stream required for Class 11-12.")
+        return data
 
-    def validate_skill_supporting_video(self, value):
-        if value and value.size > 50 * 1024 * 1024:
-            raise ValidationError("Supporting video must be under 50MB.")
-        return value
+    def validate_skill_applications(self, value):
+        try:
+            data = json.loads(value) if isinstance(value, str) else value
+        except (json.JSONDecodeError, TypeError):
+            raise ValidationError("Invalid JSON for skill applications.")
+        if not isinstance(data, list):
+            raise ValidationError("Skill applications must be a list.")
+        valid_subjects = [c[0] for c in TeacherProfile.SUBJECT_CHOICES]
+        for i, entry in enumerate(data):
+            if not entry.get("skill_name", "").strip():
+                raise ValidationError(f"Skill {i+1}: Skill name is required.")
+            if not entry.get("skill_description", "").strip():
+                raise ValidationError(f"Skill {i+1}: Skill description is required.")
+            subj = entry.get("skill_related_subject", "")
+            if not subj:
+                raise ValidationError(f"Skill {i+1}: Related subject is required.")
+            if subj not in valid_subjects:
+                raise ValidationError(f"Skill {i+1}: Invalid subject.")
+        return data
+
 
     def validate(self, data):
-        # If course application fields partially filled, validate completeness
-        has_course = data.get("subject") or data.get("boards") or data.get("classes")
-        if has_course:
-            if not data.get("subject"):
-                raise ValidationError({"subject": "Subject is required for course application."})
-            if not data.get("boards"):
-                raise ValidationError({"boards": "At least one board is required."})
-            if not data.get("classes"):
-                raise ValidationError({"classes": "At least one class is required."})
-            # Stream required if class 11 or 12 selected
-            classes = data.get("classes", [])
-            if ("11" in classes or "12" in classes) and not data.get("streams"):
-                raise ValidationError({"streams": "Stream is required for Class 11-12."})
-
-        # If skill fields partially filled, validate completeness
-        has_skill = data.get("skill_name") or data.get("skill_description")
-        if has_skill:
-            if not data.get("skill_name"):
-                raise ValidationError({"skill_name": "Skill name is required."})
-            if not data.get("skill_description"):
-                raise ValidationError({"skill_description": "Skill description is required."})
-            if not data.get("skill_related_subject"):
-                raise ValidationError({"skill_related_subject": "Related subject is required."})
-
+        # course_applications and skill_applications are already validated
+        # by their field-level validators above
         return data
+
 
     def update(self, user, validated_data):
         # --- Update Profile (personal + address) ---
@@ -478,28 +475,50 @@ class TeacherFormFillupSerializer(serializers.Serializer):
             "current_institution", "current_position",
             # Verification
             "govt_id_type", "id_number",
-            # Course application
-            "subject", "boards", "classes", "streams",
-            # Skill application
-            "skill_name", "skill_description", "skill_related_subject",
         ]
 
         for field in teacher_fields:
             if field in validated_data:
                 setattr(tp, field, validated_data[field])
 
-        # File fields
-        file_fields = [
-            "qualification_certificate", "id_proof_front", "id_proof_back",
-            "skill_supporting_image", "skill_supporting_video",
-        ]
-        for field in file_fields:
+        # File fields on TeacherProfile
+        for field in ["qualification_certificate", "id_proof_front", "id_proof_back"]:
             value = validated_data.get(field)
             if value:
                 setattr(tp, field, value)
 
         tp.save()
+
+        # --- Replace Course Applications ---
+        course_apps = validated_data.get("course_applications", [])
+        tp.course_applications.all().delete()
+        for entry in course_apps:
+            TeacherCourseApplication.objects.create(
+                teacher_profile=tp,
+                subject=entry["subject"],
+                boards=entry.get("boards", []),
+                classes=entry.get("classes", []),
+                streams=entry.get("streams", []),
+            )
+
+        # --- Replace Skill Applications ---
+        skill_apps = validated_data.get("skill_applications", [])
+        request = self.context.get("request")
+        tp.skill_applications.all().delete()
+        for i, entry in enumerate(skill_apps):
+            skill = TeacherSkillApplication.objects.create(
+                teacher_profile=tp,
+                skill_name=entry["skill_name"],
+                skill_description=entry["skill_description"],
+                skill_related_subject=entry["skill_related_subject"],
+            )
+            file_key = f"skill_file_{i}"
+            if request and file_key in request.FILES:
+                skill.skill_supporting_file = request.FILES[file_key]
+                skill.save()
+
         return user
+
 
 
 # =====================================================
