@@ -208,6 +208,9 @@ CORS_ALLOWED_ORIGINS = [
     "https://app.shikshacom.com",
     "https://www.shikshacom.com",
     "https://teacher.shikshacom.com",
+    "https://dev.shikshacom.com",        # ← add
+    "https://dev.app.shikshacom.com",    # ← add
+    "https://dev.teacher.shikshacom.com"
 ]
 CORS_ALLOW_CREDENTIALS = True
 
