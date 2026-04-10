@@ -160,3 +160,11 @@ CHANNEL_LAYERS = {
     },
 }
 GNEWS_API_KEY = os.getenv("GNEWS_API_KEY")
+# ── Celery ──────────────────────────────────────────
+CELERY_BROKER_URL = "redis://127.0.0.1:6379/1"
+CELERY_RESULT_BACKEND = "redis://127.0.0.1:6379/1"
+CELERY_ACCEPT_CONTENT = ["json"]
+CELERY_TASK_SERIALIZER = "json"
+CELERY_RESULT_SERIALIZER = "json"
+CELERY_TIMEZONE = "Asia/Kolkata"
+CELERY_TASK_ALWAYS_EAGER = False

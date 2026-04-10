@@ -360,9 +360,25 @@ def _handle_participant_join(event):
         session.status = LiveSession.STATUS_LIVE
 
     session.save(update_fields=["teacher_left_at",
-                 "status", "last_activity_at"])  # ✅ FIX
+                 "status", "last_activity_at"])
 
     broadcast_session_update(session)
+
+    # 🔥 NOTIFY ENROLLED STUDENTS WHEN TEACHER GOES LIVE
+    if str(session.created_by_id) == user_id:
+        from enrollments.models import Enrollment
+        from livestream.services.notifications import push_ws_notification
+        students = Enrollment.objects.filter(
+            course=session.course,
+            status=Enrollment.STATUS_ACTIVE
+        ).select_related("user")
+        for enrollment in students:
+            push_ws_notification(enrollment.user.id, {
+                "type": "live_session",
+                "title": f"🔴 {session.title} is now LIVE!",
+                "session_id": str(session.id),
+                "start_time": session.start_time.isoformat(),
+            })
 
 
 @transaction.atomic
