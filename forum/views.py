@@ -15,6 +15,7 @@ from .serializers import (
     NotificationSerializer,
 )
 from django.contrib.auth import get_user_model
+from livestream.services.notifications import push_ws_notification
 
 User = get_user_model()
 
@@ -43,17 +44,15 @@ class ListThreadsView(APIView):
             upvote_count=Count("upvotes"),
         )
 
-        # Search by title or content
         search = request.query_params.get("search")
         if search:
-            qs = qs.filter(Q(title__icontains=search) | Q(content__icontains=search))
+            qs = qs.filter(Q(title__icontains=search) |
+                           Q(content__icontains=search))
 
-        # Filter by tag name
         tag = request.query_params.get("tag")
         if tag:
             qs = qs.filter(tags__name=tag)
 
-        # Filter by date range
         date_from = request.query_params.get("date_from")
         date_to = request.query_params.get("date_to")
         if date_from:
@@ -61,7 +60,6 @@ class ListThreadsView(APIView):
         if date_to:
             qs = qs.filter(created_at__date__lte=date_to)
 
-        # Sort
         sort = request.query_params.get("sort", "newest")
         if sort == "oldest":
             qs = qs.order_by("created_at")
@@ -70,7 +68,6 @@ class ListThreadsView(APIView):
         else:
             qs = qs.order_by("-created_at")
 
-        # Pagination
         page = int(request.query_params.get("page", 1))
         page_size = int(request.query_params.get("page_size", 10))
         total = qs.count()
@@ -78,7 +75,8 @@ class ListThreadsView(APIView):
         end = start + page_size
         threads = qs[start:end]
 
-        serializer = ForumPostSerializer(threads, many=True, context={"request": request})
+        serializer = ForumPostSerializer(
+            threads, many=True, context={"request": request})
         return Response({"results": serializer.data, "count": total})
 
 
@@ -95,13 +93,11 @@ class CreateThreadView(APIView):
             content=serializer.validated_data.get("body", ""),
         )
 
-        # Handle tags
         tag_names = serializer.validated_data.get("tags", [])
         for name in tag_names:
             tag, _ = Tag.objects.get_or_create(name=name.lower().strip())
             post.tags.add(tag)
 
-        # Notify all other users about the new thread
         other_users = User.objects.exclude(pk=request.user.pk)
         notifications = [
             Notification(
@@ -115,7 +111,16 @@ class CreateThreadView(APIView):
         ]
         Notification.objects.bulk_create(notifications)
 
-        # Re-fetch with annotations for response
+        # 🔥 Push WebSocket notification to all users
+        for user in other_users:
+            push_ws_notification(user.id, {
+                'type': 'forum',
+                'notification_type': 'new_thread',
+                'message': f'{request.user.username} posted: "{post.title}"',
+                'thread_id': str(post.id),
+                'title': post.title,
+            })
+
         post = ForumPost.objects.filter(pk=post.pk).annotate(
             reply_count=Count("replies"),
             upvote_count=Count("upvotes"),
@@ -166,12 +171,9 @@ class ListCommentsView(APIView):
 
     def get(self, request, thread_id):
         get_object_or_404(ForumPost, pk=thread_id)
-
         qs = Reply.objects.filter(post_id=thread_id).select_related("author").annotate(
             upvote_count=Count("upvotes"),
         )
-
-        # Sort
         sort = request.query_params.get("sort", "oldest")
         if sort == "newest":
             qs = qs.order_by("-created_at")
@@ -179,7 +181,8 @@ class ListCommentsView(APIView):
             qs = qs.order_by("created_at")
 
         total = qs.count()
-        serializer = CommentSerializer(qs, many=True, context={"request": request})
+        serializer = CommentSerializer(
+            qs, many=True, context={"request": request})
         return Response({"results": serializer.data, "count": total})
 
 
@@ -203,7 +206,6 @@ class CreateCommentView(APIView):
             reply_to=reply_to,
         )
 
-        # Notify the thread author about the reply
         if post.author != request.user:
             Notification.objects.create(
                 recipient=post.author,
@@ -212,8 +214,15 @@ class CreateCommentView(APIView):
                 message=f'{request.user.username} replied to your thread: "{post.title}"',
                 thread=post,
             )
+            # 🔥 Push WebSocket notification to thread author
+            push_ws_notification(post.author.id, {
+                'type': 'forum',
+                'notification_type': 'new_reply',
+                'message': f'{request.user.username} replied to your thread: "{post.title}"',
+                'thread_id': str(post.id),
+                'title': post.title,
+            })
 
-        # Re-fetch with annotation
         reply = Reply.objects.filter(pk=reply.pk).annotate(
             upvote_count=Count("upvotes"),
         ).select_related("author").first()
@@ -283,14 +292,14 @@ class ListNotificationsView(APIView):
             recipient=request.user
         ).select_related("sender", "thread")
 
-        # Pagination
         page = int(request.query_params.get("page", 1))
         page_size = int(request.query_params.get("page_size", 8))
         total = notifications.count()
         start = (page - 1) * page_size
         end = start + page_size
 
-        serializer = NotificationSerializer(notifications[start:end], many=True)
+        serializer = NotificationSerializer(
+            notifications[start:end], many=True)
         return Response({
             "results": serializer.data,
             "count": total,
