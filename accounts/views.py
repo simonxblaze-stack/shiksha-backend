@@ -1,3 +1,4 @@
+import os
 import logging
 from accounts.email_utils import send_gmail
 from rest_framework import status
