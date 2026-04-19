@@ -274,10 +274,6 @@ class StartQuizView(APIView):
         ).exists():
             raise ValidationError("Not enrolled in this course.")
 
-        if quiz.due_date <= timezone.now():
-            raise ValidationError(
-                "Quiz has expired and can no longer be attempted.")
-
         # ── Key fix: reuse an existing PENDING attempt instead of creating a new one ──
         existing_pending = QuizAttempt.objects.filter(
             quiz=quiz,

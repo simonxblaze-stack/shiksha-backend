@@ -65,8 +65,8 @@ class QuestionCreateSerializer(serializers.ModelSerializer):
 class QuizCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Quiz
-        fields = ["id", "subject", "title", "description",
-                  "due_date", "time_limit_minutes"]
+        fields = ["id", "subject", "title",
+                  "description", "time_limit_minutes"]
         read_only_fields = ["id"]
 
     def validate_subject(self, subject):
@@ -76,11 +76,6 @@ class QuizCreateSerializer(serializers.ModelSerializer):
         if not SubjectTeacher.objects.filter(subject=subject, teacher=user).exists():
             raise PermissionDenied("You are not assigned to this subject.")
         return subject
-
-    def validate_due_date(self, due_date):
-        if due_date <= timezone.now():
-            raise ValidationError("Due date must be in the future.")
-        return due_date
 
     def create(self, validated_data):
         return Quiz.objects.create(
@@ -104,7 +99,7 @@ class QuizDashboardSerializer(serializers.ModelSerializer):
         model = Quiz
         fields = [
             "id", "title", "subject_name", "course_title", "teacher_name",
-            "created_at", "due_date", "total_marks", "questions_count",
+            "created_at", "total_marks", "questions_count",
             "status", "score", "is_published", "attempts_count",
         ]
 
@@ -143,9 +138,6 @@ class QuizSubmitSerializer(serializers.Serializer):
 
         if not quiz.is_published:
             raise ValidationError("Quiz not published.")
-
-        if quiz.due_date <= timezone.now():
-            raise ValidationError("Quiz expired.")
 
         # Allow partial submission (auto-submit on timer expiry)
         # We do NOT validate all questions answered here — partial is OK.
@@ -233,7 +225,7 @@ class QuizDetailSerializer(serializers.ModelSerializer):
         model = Quiz
         fields = [
             "id", "title", "description", "subject_name", "course_title",
-            "teacher_name", "due_date", "created_at", "time_limit_minutes", "questions",
+            "teacher_name", "created_at", "time_limit_minutes", "questions",
         ]
 
     def get_questions(self, obj):
@@ -257,7 +249,7 @@ class QuizDetailTeacherSerializer(serializers.ModelSerializer):
         model = Quiz
         fields = [
             "id", "title", "description", "subject_name", "course_title",
-            "teacher_name", "due_date", "created_at", "time_limit_minutes",
+            "teacher_name", "created_at", "time_limit_minutes",
             "is_published", "questions",
         ]
 
@@ -315,19 +307,15 @@ class TeacherQuizAnalyticsSerializer(serializers.ModelSerializer):
     highest_score = serializers.FloatField(read_only=True)
     lowest_score = serializers.FloatField(read_only=True)
     submission_rate = serializers.FloatField(read_only=True)
-    is_expired = serializers.SerializerMethodField()
 
     class Meta:
         model = Quiz
         fields = [
             "id", "title", "created_at", "subject_name", "course_title",
-            "due_date", "is_published", "is_expired", "questions_count",
+            "is_published", "questions_count",
             "total_attempts", "submission_rate", "average_score",
             "highest_score", "lowest_score",
         ]
-
-    def get_is_expired(self, obj):
-        return obj.due_date <= timezone.now()
 
 
 class TeacherQuizStudentSummarySerializer(serializers.Serializer):
