@@ -104,8 +104,13 @@ class QuizDashboardSerializer(serializers.ModelSerializer):
         ]
 
     def get_status(self, obj):
+        # Primary: use prefetched data
         attempts = getattr(obj, "user_submitted_attempts", [])
         if attempts:
+            return "SUBMITTED"
+        # Fallback: use submitted_ids set passed via context
+        submitted_ids = self.context.get("submitted_ids", set())
+        if obj.id in submitted_ids:
             return "SUBMITTED"
         pending = getattr(obj, "user_attempts", [])
         if pending:
@@ -119,8 +124,13 @@ class QuizDashboardSerializer(serializers.ModelSerializer):
         return attempts[0].score
 
     def get_attempts_count(self, obj):
+        # Primary: prefetched
         attempts = getattr(obj, "user_submitted_attempts", [])
-        return len(attempts)
+        if attempts:
+            return len(attempts)
+        # Fallback: at least 1 if in submitted_ids
+        submitted_ids = self.context.get("submitted_ids", set())
+        return 1 if obj.id in submitted_ids else 0
 
 
 class QuizSubmitSerializer(serializers.Serializer):

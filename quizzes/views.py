@@ -228,10 +228,12 @@ class StudentDashboardView(APIView):
         if subject_id:
             quizzes = quizzes.filter(subject_id=subject_id)
 
-        submitted_ids = QuizAttempt.objects.filter(
-            student=user,
-            status=QuizAttempt.STATUS_SUBMITTED,
-        ).values_list("quiz_id", flat=True).distinct()
+        submitted_ids = set(
+            QuizAttempt.objects.filter(
+                student=user,
+                status=QuizAttempt.STATUS_SUBMITTED,
+            ).values_list("quiz_id", flat=True).distinct()
+        )
 
         if status_filter == "completed":
             quizzes = quizzes.filter(id__in=submitted_ids)
@@ -241,7 +243,7 @@ class StudentDashboardView(APIView):
         serializer = QuizDashboardSerializer(
             quizzes,
             many=True,
-            context={"request": request},
+            context={"request": request, "submitted_ids": submitted_ids},
         )
 
         return Response(serializer.data)
