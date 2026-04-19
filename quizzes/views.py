@@ -129,11 +129,22 @@ class TeacherDeleteQuizView(APIView):
         if quiz.created_by != request.user:
             raise PermissionDenied("You did not create this quiz.")
 
-        if quiz.is_published and quiz.attempts.exists():
-            return Response(
-                {"detail": "Cannot delete quiz with student attempts."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        attempt_count = quiz.attempts.count()
+
+        # If published and has attempts, require explicit confirmation via ?force=true
+        if quiz.is_published and attempt_count > 0:
+            force = request.query_params.get("force", "").lower() == "true"
+            if not force:
+                return Response(
+                    {
+                        "detail": f"This quiz has {attempt_count} student attempt(s). "
+                        f"Deleting will permanently remove all attempts and scores. "
+                        f"Pass ?force=true to confirm.",
+                        "attempt_count": attempt_count,
+                        "requires_force": True,
+                    },
+                    status=status.HTTP_409_CONFLICT
+                )
 
         quiz.delete()
 
