@@ -30,6 +30,33 @@ User = get_user_model()
 logger = logging.getLogger(__name__)
 
 
+def _broadcast_session_update(session):
+    """
+    Push a session_update event to every participant of this session
+    via their personal user channel group (user_<user_id>).
+    This lets the frontend update session cards in real-time without polling.
+    """
+    channel_layer = get_channel_layer()
+    if not channel_layer:
+        return
+
+    from .serializers import SessionListSerializer
+    data = SessionListSerializer(session).data
+
+    user_ids = {str(session.teacher_id), str(session.requested_by_id)}
+    for p in session.participants.values_list("user_id", flat=True):
+        user_ids.add(str(p))
+
+    for uid in user_ids:
+        try:
+            async_to_sync(channel_layer.group_send)(
+                f"user_{uid}",
+                {"type": "session_update", "data": data},
+            )
+        except Exception:
+            pass
+
+
 def _session_qs():
     """Base queryset with all relations needed by SessionListSerializer."""
     return PrivateSession.objects.select_related(
@@ -86,11 +113,24 @@ def request_session(request):
         status="pending",
     )
 
+    # Always add the requesting student as participant
     SessionParticipant.objects.create(
         session=session,
         user=request.user,
         role="student"
     )
+
+    # Add any additional group students
+    for student_id in d.get("student_ids", []):
+        try:
+            student = User.objects.get(pk=student_id)
+            SessionParticipant.objects.get_or_create(
+                session=session,
+                user=student,
+                defaults={"role": "student"},
+            )
+        except User.DoesNotExist:
+            pass
 
     return Response(
         PrivateSessionSerializer(session).data,
@@ -160,6 +200,7 @@ def cancel_session(request, session_id):
     session.status = "cancelled"
     session.cancel_reason = request.data.get("reason", "")
     session.save()
+    _broadcast_session_update(session)
     return Response(PrivateSessionSerializer(session).data)
 
 
@@ -185,6 +226,7 @@ def confirm_reschedule(request, session_id):
     session.rescheduled_time = None
     session.status = "approved"
     session.save()
+    _broadcast_session_update(session)
     return Response(PrivateSessionSerializer(session).data)
 
 
@@ -208,6 +250,7 @@ def decline_reschedule(request, session_id):
     session.decline_reason = request.data.get(
         "reason", "Student declined reschedule.")
     session.save()
+    _broadcast_session_update(session)
     return Response(PrivateSessionSerializer(session).data)
 
 
@@ -292,6 +335,7 @@ def accept_request(request, session_id):
 
     session.status = "approved"
     session.save()
+    _broadcast_session_update(session)
     return Response(PrivateSessionSerializer(session).data)
 
 
@@ -314,6 +358,7 @@ def decline_request(request, session_id):
     session.status = "declined"
     session.decline_reason = request.data.get("reason", "")
     session.save()
+    _broadcast_session_update(session)
     return Response(PrivateSessionSerializer(session).data)
 
 
@@ -358,6 +403,7 @@ def reschedule_request(request, session_id):
     session.reschedule_reason = reason
     session.status = "needs_reconfirmation"
     session.save()
+    _broadcast_session_update(session)
     return Response(PrivateSessionSerializer(session).data)
 
 
@@ -380,6 +426,7 @@ def teacher_cancel_session(request, session_id):
     session.status = "cancelled"
     session.cancel_reason = request.data.get("reason", "Cancelled by teacher.")
     session.save()
+    _broadcast_session_update(session)
     return Response(PrivateSessionSerializer(session).data)
 
 
@@ -405,6 +452,7 @@ def start_session(request, session_id):
     session.active_connections = 0
     session.all_left_at = None
     session.save()
+    _broadcast_session_update(session)
     return Response(PrivateSessionSerializer(session).data)
 
 
@@ -440,6 +488,7 @@ def end_session(request, session_id):
         )
 
     _end_session_internal(session, reason="teacher_ended")
+    _broadcast_session_update(session)
     return Response(PrivateSessionSerializer(session).data)
 
 
