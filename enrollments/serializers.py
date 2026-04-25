@@ -138,11 +138,6 @@ class EnrollmentRequestCreateSerializer(serializers.ModelSerializer):
         user = self.context["request"].user
         course = attrs["course"]
 
-        if Enrollment.objects.filter(
-            user=user, course=course, status=Enrollment.STATUS_ACTIVE
-        ).exists():
-            raise serializers.ValidationError("You are already enrolled in this course.")
-
         if EnrollmentRequest.objects.filter(
             user=user, course=course, status=EnrollmentRequest.STATUS_PENDING
         ).exists():
