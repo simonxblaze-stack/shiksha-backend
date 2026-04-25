@@ -1,34 +1,11 @@
-from .settings_base import *
+"""Settings dispatcher.
+
+Reads DJANGO_ENV from the environment and loads the matching settings module.
+Defaults to production. Set DJANGO_ENV=dev on the dev droplet's .env file.
+"""
 import os
 
-ALLOWED_HOSTS = [
-    "api.shikshacom.com",
-    "admin.shikshacom.com",
-    "68.183.81.236",
-    "localhost",
-    "127.0.0.1",
-]
-
-CORS_ALLOWED_ORIGINS = [
-    "https://shikshacom.com",
-    "https://admin.shikshacom.com",
-    "https://www.shikshacom.com",
-    "https://app.shikshacom.com",
-    "https://admin.shikshacom.com",
-    "https://teacher.shikshacom.com",
-]
-
-CORS_ALLOW_CREDENTIALS = True
-
-CSRF_TRUSTED_ORIGINS = [
-    "https://shikshacom.com",
-    "https://admin.shikshacom.com",
-    "https://www.shikshacom.com",
-    "https://app.shikshacom.com",
-    "https://admin.shikshacom.com",
-    "https://teacher.shikshacom.com",
-    "https://api.shikshacom.com",
-]
-
-MEDIA_URL = "/media/"
-MEDIA_ROOT = BASE_DIR / "media"
+if os.getenv("DJANGO_ENV") == "dev":
+    from .settings_dev import *  # noqa: F401,F403
+else:
+    from .settings_prod import *  # noqa: F401,F403
