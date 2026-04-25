@@ -7,7 +7,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework import status
-from enrollments.models import Enrollment, Subscription
+from enrollments.models import Enrollment, EnrollmentRequest, Subscription
 from accounts.permissions import IsTeacher
 from quizzes.models import Quiz
 from assignments.models import Assignment
@@ -142,11 +142,30 @@ class MyEnrolledCoursesView(APIView):
         ):
             latest_sub_by_course.setdefault(sub.course_id, sub)
 
+        history_by_course = {}
+        for req in (
+            EnrollmentRequest.objects
+            .filter(user=request.user, course_id__in=course_ids)
+            .order_by("-submitted_at")[:50]
+        ):
+            history_by_course.setdefault(req.course_id, []).append({
+                "id": str(req.id),
+                "amount_paid": req.amount_paid,
+                "payment_date": req.payment_date,
+                "utr_number": req.utr_number,
+                "payment_method": req.payment_method,
+                "status": req.status,
+                "submitted_at": req.submitted_at,
+                "reviewed_at": req.reviewed_at,
+            })
+
         serialized = CourseSerializer(courses, many=True).data
         for course_data, course in zip(serialized, courses):
             sub = latest_sub_by_course.get(course.id)
+            payment_history = history_by_course.get(course.id, [])
             if sub is None:
                 course_data["subscription"] = None
+                course_data["payment_history"] = payment_history
             else:
                 is_active = (
                     sub.status == Subscription.STATUS_ACTIVE
@@ -160,6 +179,7 @@ class MyEnrolledCoursesView(APIView):
                     "is_active": is_active,
                     "days_remaining": days_remaining,
                 }
+                course_data["payment_history"] = payment_history
 
         return Response(serialized)
 
