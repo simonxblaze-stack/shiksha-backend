@@ -13,6 +13,7 @@ from .views import (
     TeacherAllStudentsView,
     SubjectsByCourseTitleView,
     PublicCourseDetailView,
+    AdminCourseListView,
 )
 from .views import MySubjectsView
 from .views_recordings import (
@@ -35,6 +36,8 @@ urlpatterns = [
     path("teacher/my-classes/",   TeacherMyClassesView.as_view()),
     path("teacher/all-students/", TeacherAllStudentsView.as_view()),
     path("subjects-by-course/",   SubjectsByCourseTitleView.as_view()),
+
+    path("admin/",                AdminCourseListView.as_view()),
 
     path("",                           CreateCourseView.as_view()),
     path("mine/",                      MyCoursesView.as_view()),

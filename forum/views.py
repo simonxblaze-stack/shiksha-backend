@@ -151,7 +151,7 @@ class DeleteThreadView(APIView):
 
     def delete(self, request, thread_id):
         post = get_object_or_404(ForumPost, pk=thread_id)
-        if post.author != request.user:
+        if post.author != request.user and not request.user.is_staff:
             return Response(
                 {"detail": "You can only delete your own threads."},
                 status=status.HTTP_403_FORBIDDEN,
