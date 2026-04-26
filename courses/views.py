@@ -8,7 +8,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework import status
 from enrollments.models import Enrollment, EnrollmentRequest, Subscription
-from accounts.permissions import IsTeacher
+from accounts.permissions import IsTeacher, IsAdmin
 from quizzes.models import Quiz
 from assignments.models import Assignment
 from .models import Course, Subject
@@ -604,4 +604,35 @@ class MySubjectsView(APIView):
         return Response([
             {"id": str(s.id), "name": s.name}
             for s in subjects
+        ])
+
+
+# =========================
+# ADMIN — LIST ALL COURSES
+# =========================
+
+class AdminCourseListView(APIView):
+    permission_classes = [IsAuthenticated, IsAdmin]
+
+    def get(self, request):
+        courses = (
+            Course.objects
+            .annotate(
+                enrollment_count=Count(
+                    "enrollments",
+                    filter=Q(enrollments__status=Enrollment.STATUS_ACTIVE),
+                )
+            )
+            .order_by("-created_at")
+        )
+        return Response([
+            {
+                "id": str(c.id),
+                "title": c.title,
+                "description": c.description,
+                "price": c.price,
+                "enrollment_count": c.enrollment_count,
+                "created_at": c.created_at,
+            }
+            for c in courses
         ])
